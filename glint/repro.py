@@ -17,7 +17,7 @@ from typing import Any
 
 from glint import config, gemini, media, workspace
 from glint.gemini import VideoRef
-from glint.perceive import GATE_VIDEO_RESOLUTION, app_source_parts, is_defect, perceive, symptom_block
+from glint.perceive import app_source_parts, is_defect, perceive, symptom_block
 from glint.schemas import GateResult, ReproSpec
 
 log = logging.getLogger("glint.repro")
@@ -248,7 +248,12 @@ async def _attempt(
         g1b = GateResult(gate="G1B", passed=False, detail="The failing run produced no screenshot.")
         return outcome, detail, test_path, None, [g1, g1b]
     answers = await gemini.decide(
-        [gemini.video_block(video_ref, GATE_VIDEO_RESOLUTION), gemini.image_block(shot), symptom_block(spec)], {"g1b": config.Q_G1B}
+        [
+            gemini.video_block(video_ref, config.DECISION_VIDEO_RESOLUTION),
+            gemini.image_block(shot),
+            symptom_block(spec),
+        ],
+        {"g1b": config.Q_G1B},
     )
     p_yes = answers["g1b"]
     matched = p_yes >= config.TH_G1B_SYMPTOM_MATCH

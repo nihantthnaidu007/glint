@@ -12,10 +12,6 @@ log = logging.getLogger("glint.perceive")
 
 SOURCE_EXT = {".js", ".html", ".css"}
 
-# Decision gates that judge the recording need more than the default "low" resolution: on a 720p recording of
-# a subtle logic bug, G0 measured p_yes 0.25 at "low" and 0.52 at "high" (same video, same question).
-GATE_VIDEO_RESOLUTION = "high"
-
 PERCEIVE_PROMPT = """You are given a screen recording of a web application and the application's full source code.
 The recording was made by a user reporting a bug. Watch the whole recording carefully, and listen to any narration.
 
@@ -67,7 +63,7 @@ def symptom_block(spec: ReproSpec) -> dict:
 async def is_defect(video_ref: VideoRef) -> GateResult:
     """G0: does the recording show an application misbehaving at all."""
     answers = await gemini.decide(
-        [gemini.video_block(video_ref, GATE_VIDEO_RESOLUTION)], {"g0": config.Q_G0}
+        [gemini.video_block(video_ref, config.DECISION_VIDEO_RESOLUTION)], {"g0": config.Q_G0}
     )
     p_yes = answers["g0"]
     passed = p_yes >= config.TH_G0_IS_DEFECT
