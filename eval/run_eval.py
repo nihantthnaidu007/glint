@@ -1,8 +1,16 @@
 """Eval runner: runs Glint and the baseline over the corpus and scores every patch with the hidden oracle.
 
 This is the only module that calls the oracle (eval.fuzz.differential against the unmutated app).
-Answer-key hygiene: from meta.json only the "split" field is read, and for a mutant the systems under
-test receive nothing but the bug video and the mutant's own app directory.
+Answer-key hygiene: for a mutant the systems under test receive nothing but the bug video and the mutant's
+own app directory. From meta.json the "split" field is read for case discovery, and the "file" field is
+read only in phase 2, after every model run has finished, to build the oracle's answer-key control.
+
+Two phases:
+  1. All model and pipeline runs. Each record saves the claimed patch, with oracle "PENDING".
+  2. Oracle scoring alone, after phase 1 has fully finished, at most ORACLE_PARALLEL browser jobs at once.
+     It starts with controls that need no model call; if a control fails nothing is scored.
+A divergence counts only if it reproduces: the diverging sequence is replayed ORACLE_REPLAYS more times and
+must diverge at the same step every time. Otherwise it is logged as flaky and the next sequence is tried.
 """
 from __future__ import annotations
 
@@ -44,9 +52,12 @@ ORACLE_N_SEQ = 200
 ORACLE_SEED = 10_000
 ORACLE_PARALLEL = 2
 ORACLE_ATTEMPTS = 2
+ORACLE_REPLAYS = 2  # extra replays of a diverging sequence; all must diverge at the same step
+SEQUENCE_LENGTH = 12  # eval.fuzz.differential default, part of its snapshot cache key
 REPRO_NAME = "repro_test.py"
 
 NO_PATCH = "NO_PATCH"
+PENDING = "PENDING"  # a patch was claimed in phase 1 and is waiting for the oracle in phase 2
 TRUE_FIX = "TRUE_FIX"
 WRONG_FIX = "WRONG_FIX"
 HARMLESS_PATCH = "HARMLESS_PATCH"  # clean video only: a patch was claimed but behavior did not change
@@ -73,6 +84,7 @@ class OracleCtx:
     seed: int = ORACLE_SEED
     cache: dict[tuple[str, int, int], list[dict[str, Any]]] = field(default_factory=dict)
     slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(ORACLE_PARALLEL))
+    flaky: list[dict[str, Any]] = field(default_factory=list)
 
 
 # --- corpus discovery ---------------------------------------------------------------------------
@@ -139,6 +151,46 @@ def record_path(out_dir: Path, system: str, case: Case) -> Path:
 # --- the hidden oracle --------------------------------------------------------------------------
 
 
+async def reproducible_divergence(oracle: OracleCtx, candidate: Path, label: str = "") -> dict[str, Any] | None:
+    """First divergence between candidate and the unmutated app that reproduces, or None.
+
+    Sequences are checked one at a time. When one diverges it is replayed ORACLE_REPLAYS more times with no
+    cached snapshots. It counts only if every replay diverges at the same step; otherwise it is recorded in
+    oracle.flaky and the next sequence is tried.
+    """
+    cache_prefix = str(oracle.original.resolve())
+    for offset in range(oracle.n_seq):
+        seq_seed = oracle.seed + offset
+        first = await differential(
+            oracle.original, candidate, 1, seq_seed, browser=oracle.browser, orig_cache=oracle.cache
+        )
+        if first is None:
+            continue
+        steps: list[int | None] = [first["step"]]
+        for _ in range(ORACLE_REPLAYS):
+            again = await differential(oracle.original, candidate, 1, seq_seed, browser=oracle.browser)
+            steps.append(None if again is None else again["step"])
+        if all(step == steps[0] for step in steps):
+            return {**first, "sequence_seed": seq_seed}
+        oracle.flaky.append({"candidate": label or str(candidate), "sequence_seed": seq_seed, "steps": steps})
+        oracle.cache.pop((cache_prefix, seq_seed, SEQUENCE_LENGTH), None)
+        log.warning("flaky divergence for %s at sequence seed %d (steps %s), not counted", label, seq_seed, steps)
+    return None
+
+
+async def _oracle_verdict(oracle: OracleCtx, candidate: Path, label: str) -> dict[str, Any] | None:
+    """reproducible_divergence under the oracle's concurrency limit, with one retry on a browser failure."""
+    async with oracle.slots:
+        for attempt in range(1, ORACLE_ATTEMPTS + 1):
+            try:
+                return await reproducible_divergence(oracle, candidate, label)
+            except Exception as exc:
+                if attempt == ORACLE_ATTEMPTS:
+                    raise
+                log.warning("oracle attempt %d failed (%s), retrying", attempt, type(exc).__name__)
+    return None
+
+
 async def score_patch(patch: Patch | None, case: Case, oracle: OracleCtx) -> tuple[str, str]:
     """Oracle verdict for one run: (label, detail). Compares the patched app with the unmutated app."""
     if patch is None:
@@ -149,27 +201,44 @@ async def score_patch(patch: Patch | None, case: Case, oracle: OracleCtx) -> tup
             apply_patch(ws, patch)
         except PatchRejected as exc:
             return WRONG_FIX, f"patch rejected: {exc}"
-        async with oracle.slots:
-            for attempt in range(1, ORACLE_ATTEMPTS + 1):
-                try:
-                    divergence = await differential(
-                        oracle.original,
-                        ws,
-                        oracle.n_seq,
-                        oracle.seed,
-                        browser=oracle.browser,
-                        orig_cache=oracle.cache,
-                    )
-                    break
-                except Exception as exc:
-                    if attempt == ORACLE_ATTEMPTS:
-                        raise
-                    log.warning("oracle attempt %d failed (%s), retrying", attempt, type(exc).__name__)
+        divergence = await _oracle_verdict(oracle, ws, f"{case.case_id} {case.rung} patch")
         if divergence is None:
             return (TRUE_FIX if case.kind == "bug" else HARMLESS_PATCH), ""
-        return WRONG_FIX, f"behavior differs from the unmutated app at step {divergence['step']} of a fuzz sequence"
+        return WRONG_FIX, (
+            f"behavior differs from the unmutated app at step {divergence['step']} of fuzz sequence "
+            f"{divergence['sequence_seed']} (reproduced {ORACLE_REPLAYS + 1} of {ORACLE_REPLAYS + 1} times)"
+        )
     finally:
         shutil.rmtree(ws, ignore_errors=True)
+
+
+async def run_controls(cases: list[Case], corpus: Path, oracle: OracleCtx) -> list[dict[str, Any]]:
+    """Oracle controls, no model calls. The original app must score TRUE_FIX, every in-split mutant must
+    score WRONG_FIX unpatched, and TRUE_FIX once its mutated file is restored from the unmutated app."""
+    mutants = sorted({c.case_id: c.app_dir for c in cases if c.kind == "bug"}.items())
+    rows: list[dict[str, Any]] = []
+
+    async def check(name: str, candidate: Path, expected: str) -> None:
+        divergence = await _oracle_verdict(oracle, candidate, name)
+        got = TRUE_FIX if divergence is None else WRONG_FIX
+        detail = "" if divergence is None else f"step {divergence['step']} of sequence {divergence['sequence_seed']}"
+        rows.append({"control": name, "expected": expected, "got": got, "ok": got == expected, "detail": detail})
+
+    restored: list[Path] = []
+    try:
+        jobs = [check("original app as candidate", oracle.original, TRUE_FIX)]
+        for mutant_id, app_dir in mutants:
+            jobs.append(check(f"{mutant_id} unpatched", app_dir, WRONG_FIX))
+            meta = json.loads((corpus / APP_ID / mutant_id / "meta.json").read_text(encoding="utf-8"))
+            ws = make_workspace(app_dir)
+            restored.append(ws)
+            shutil.copyfile(oracle.original / meta["file"], ws / meta["file"])
+            jobs.append(check(f"{mutant_id} answer key restored", ws, TRUE_FIX))
+        await asyncio.gather(*jobs)
+    finally:
+        for ws in restored:
+            shutil.rmtree(ws, ignore_errors=True)
+    return sorted(rows, key=lambda r: r["control"])
 
 
 async def repro_is_valid(bundle: Path, mutant_app: Path, original: Path = ORIGINAL_APP) -> bool | None:
@@ -234,6 +303,7 @@ def base_record(case: Case, system: str, split: str, run_id: str) -> dict[str, A
         "claimed_fix": False,
         "oracle": NO_PATCH,
         "oracle_detail": "",
+        "patch": None,
         "repro_valid": None,
         "fixed_in_repair": False,
         "latency_s": 0.0,
@@ -250,21 +320,18 @@ def base_record(case: Case, system: str, split: str, run_id: str) -> dict[str, A
     }
 
 
-async def run_glint(case: Case, split: str, oracle: OracleCtx) -> dict[str, Any]:
-    """Run the Glint pipeline on one case and score its claimed fix."""
+async def run_glint(case: Case, split: str) -> dict[str, Any]:
+    """Phase 1: run the Glint pipeline on one case and save its claimed fix for the oracle."""
     run_id = fresh_run_id()
     record = base_record(case, "glint", split, run_id)
     result = await run_pipeline(case.video, case.app_dir, APP_ID, run_id, None)
     winner = next((c for c in result.candidates if c.id == result.winner_id), None)
     patch = winner.patch if result.status == "VERIFIED_FIX" and winner is not None else None
-    label, detail = await score_patch(patch, case, oracle)
-    if case.kind == "bug":
-        record["repro_valid"] = await repro_is_valid(Path(config.RUNS_DIR) / run_id, case.app_dir, oracle.original)
     record.update(
         status=result.status,
         claimed_fix=patch is not None,
-        oracle=label,
-        oracle_detail=detail,
+        oracle=PENDING if patch is not None else NO_PATCH,
+        patch=patch.model_dump() if patch is not None else None,
         fixed_in_repair=patch is not None and winner is not None and winner.source == "repair",
         latency_s=result.latency_s,
         cost_usd=round(result.usage.cost_usd, 6),
@@ -279,8 +346,8 @@ async def run_glint(case: Case, split: str, oracle: OracleCtx) -> dict[str, Any]
     return record
 
 
-async def run_baseline(case: Case, split: str, oracle: OracleCtx) -> dict[str, Any]:
-    """Run the single-call baseline on one case and score its patch. Raises if the model call fails."""
+async def run_baseline(case: Case, split: str) -> dict[str, Any]:
+    """Phase 1: run the single-call baseline on one case and save its patch. Raises if the model call fails."""
     run_id = fresh_run_id("_baseline")
     record = base_record(case, "baseline", split, run_id)
     gemini.bind_run(run_id)
@@ -288,12 +355,11 @@ async def run_baseline(case: Case, split: str, oracle: OracleCtx) -> dict[str, A
     patch = await baselines.single_call(case.video, case.app_dir)
     latency_s = round(time.monotonic() - started, 2)
     usage = gemini.usage_snapshot(run_id)
-    label, detail = await score_patch(patch, case, oracle)
     record.update(
         status="PATCH" if patch is not None else NO_PATCH,
         claimed_fix=patch is not None,
-        oracle=label,
-        oracle_detail=detail,
+        oracle=PENDING if patch is not None else NO_PATCH,
+        patch=patch.model_dump() if patch is not None else None,
         latency_s=latency_s,
         cost_usd=round(usage.cost_usd, 6),
         tokens=usage.input_tokens + usage.output_tokens,
@@ -337,50 +403,109 @@ def run_config(args: argparse.Namespace, corpus: Path, n_cases: int) -> dict[str
         },
         "n_candidates": config.N_CANDIDATES,
         "run_budget_s": config.RUN_BUDGET_S,
-        "oracle": {"n_seq": ORACLE_N_SEQ, "seed": ORACLE_SEED},
+        "oracle": {"n_seq": ORACLE_N_SEQ, "seed": ORACLE_SEED, "replays": ORACLE_REPLAYS, "parallel": ORACLE_PARALLEL},
     }
 
 
+async def phase_one(args: argparse.Namespace, cases: list[Case], out_dir: Path) -> int:
+    """All model and pipeline runs. Returns the number of runs that could not be completed."""
+    slots = asyncio.Semaphore(args.concurrency)
+    errors = 0
+
+    async def one(case: Case, system: str) -> None:
+        nonlocal errors
+        path = record_path(out_dir, system, case)
+        if path.is_file() and not args.force:
+            print(summary_line(json.loads(path.read_text(encoding="utf-8")), " (already done, skipped)"))
+            return
+        async with slots:
+            try:
+                record = await RUNNERS[system](case, args.split)
+            except Exception as exc:
+                errors += 1
+                log.exception("%s %s %s could not be completed", case.case_id, case.rung, system)
+                print(f"{case.case_id} {case.rung} {system:<8} ERROR {type(exc).__name__}: not recorded, rerun")
+                return
+        record["finished_at"] = datetime.now(UTC).isoformat()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        print(summary_line(record))
+
+    await asyncio.gather(*(one(case, system) for case in cases for system in args.systems))
+    return errors
+
+
+async def phase_two(args: argparse.Namespace, cases: list[Case], corpus: Path, out_dir: Path) -> int:
+    """Oracle scoring alone. Returns 0, or 2 when a control failed (then nothing is scored)."""
+    todo: list[tuple[Path, dict[str, Any], Case]] = []
+    for case in cases:
+        for system in args.systems:
+            path = record_path(out_dir, system, case)
+            if path.is_file():
+                record = json.loads(path.read_text(encoding="utf-8"))
+                needs_repro = system == "glint" and case.kind == "bug" and not record.get("repro_checked")
+                if record.get("oracle") == PENDING or needs_repro:
+                    todo.append((path, record, case))
+    controls_path = out_dir / "controls.json"
+    if not todo and controls_path.is_file():
+        print("phase 2: nothing to score")
+        return 0
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        oracle = OracleCtx(browser=browser)
+        try:
+            print(f"phase 2: oracle controls ({ORACLE_N_SEQ} sequences each, {ORACLE_PARALLEL} at a time)")
+            controls = await run_controls(cases, corpus, oracle)
+            ok = all(row["ok"] for row in controls)
+            controls_path.write_text(
+                json.dumps({"ok": ok, "rows": controls, "flaky": oracle.flaky, "n_seq": ORACLE_N_SEQ}, indent=2), "utf-8"
+            )
+            for row in controls:
+                verdict = "ok" if row["ok"] else "CONTROL FAILED"
+                print(f"control: {row['control']:<32} expected={row['expected']:<9} got={row['got']:<9} {verdict}")
+            if not ok:
+                print("A control failed, so oracle results would be invalid. Nothing was scored.")
+                return 2
+
+            async def score(path: Path, record: dict[str, Any], case: Case) -> None:
+                if record.get("oracle") == PENDING:
+                    label, detail = await score_patch(Patch.model_validate(record["patch"]), case, oracle)
+                    record.update(oracle=label, oracle_detail=detail)
+                path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+                print(summary_line(record))
+
+            await asyncio.gather(*(score(*item) for item in todo))
+            # The repro check also drives a browser, so it runs after the oracle, one run at a time.
+            for path, record, case in todo:
+                if record["system"] == "glint" and case.kind == "bug" and not record.get("repro_checked"):
+                    bundle = Path(config.RUNS_DIR) / record["run_id"]
+                    record["repro_valid"] = await repro_is_valid(bundle, case.app_dir, oracle.original)
+                    record["repro_checked"] = True
+                    path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+            data = json.loads(controls_path.read_text(encoding="utf-8"))
+            data["flaky"] = oracle.flaky
+            controls_path.write_text(json.dumps(data, indent=2), "utf-8")
+            print(f"phase 2 done: {len(oracle.flaky)} flaky sequence(s) seen and not counted")
+        finally:
+            await browser.close()
+    return 0
+
+
 async def run_all(args: argparse.Namespace) -> int:
-    """Run every missing (case, system) pair. Returns the number of runs that could not be completed."""
+    """Phase 1 (models), then phase 2 (oracle). Returns a process exit code."""
     corpus = args.corpus.resolve()
     cases = discover_cases(corpus, args.split, args.rungs, args.include_clean, args.limit)
     out_dir = results_dir(args.split, args.tag)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "run_config.json").write_text(json.dumps(run_config(args, corpus, len(cases)), indent=2), "utf-8")
     print(f"{len(cases)} videos x {len(args.systems)} systems from {corpus} -> {out_dir}")
-
-    slots = asyncio.Semaphore(args.concurrency)
-    errors = 0
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
-        oracle = OracleCtx(browser=browser)
-
-        async def one(case: Case, system: str) -> None:
-            nonlocal errors
-            path = record_path(out_dir, system, case)
-            if path.is_file() and not args.force:
-                print(summary_line(json.loads(path.read_text(encoding="utf-8")), " (already done, skipped)"))
-                return
-            async with slots:
-                try:
-                    record = await RUNNERS[system](case, args.split, oracle)
-                except Exception as exc:
-                    errors += 1
-                    log.exception("%s %s %s could not be completed", case.case_id, case.rung, system)
-                    print(f"{case.case_id} {case.rung} {system:<8} ERROR {type(exc).__name__}: not recorded, rerun")
-                    return
-            record["finished_at"] = datetime.now(UTC).isoformat()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-            print(summary_line(record))
-
-        try:
-            await asyncio.gather(*(one(case, system) for case in cases for system in args.systems))
-        finally:
-            await browser.close()
-    return errors
+    print("phase 1: model and pipeline runs")
+    errors = await phase_one(args, cases, out_dir)
+    if errors:
+        print(f"phase 1 left {errors} run(s) unrecorded. Rerun the same command; the oracle has not run.")
+        return 1
+    return await phase_two(args, cases, corpus, out_dir)
 
 
 def _csv_choice(allowed: tuple[str, ...]) -> Any:
@@ -417,10 +542,7 @@ def main() -> None:
         raise SystemExit("--concurrency must be at least 1")
     if not (args.corpus / APP_ID).is_dir():
         raise SystemExit(f"no corpus at {args.corpus / APP_ID}")
-    errors = asyncio.run(run_all(args))
-    if errors:
-        print(f"{errors} run(s) could not be completed and were not recorded. Run the same command again.")
-        sys.exit(1)
+    sys.exit(asyncio.run(run_all(args)))
 
 
 if __name__ == "__main__":
