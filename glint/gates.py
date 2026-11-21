@@ -24,20 +24,6 @@ LOAD_TIMEOUT_MS = 8000
 MAX_ERRORS_REPORTED = 3
 DETAIL_CHARS = 300
 
-# Browser work (G2 and G3) runs for one candidate at a time. The static server behind workspace.serve()
-# resets connections when several browsers load pages at the same moment, which leaves the app half loaded
-# and makes a correct fix look broken. It also picks its port before binding it, so parallel starts can collide.
-_browser_lock_state: tuple[asyncio.AbstractEventLoop, asyncio.Lock] | None = None
-
-
-def _browser_lock() -> asyncio.Lock:
-    global _browser_lock_state
-    loop = asyncio.get_running_loop()
-    if _browser_lock_state is None or _browser_lock_state[0] is not loop:
-        _browser_lock_state = (loop, asyncio.Lock())
-    return _browser_lock_state[1]
-
-
 def outcome_block(spec: ReproSpec) -> dict:
     """Decision API text block for G4: the reported symptom plus the expected correct behavior.
 
@@ -207,7 +193,7 @@ async def _run_gates(
     shots_dir.mkdir(parents=True, exist_ok=True)
     after_shot = shots_dir / f"{c.id}_after.png"
 
-    async with _browser_lock(), workspace.serve(ws) as base_url:
+    async with workspace.serve(ws) as base_url:
         g2 = await _g2(c, test_copy, base_url, work_dir, after_shot)
         c.gates.append(g2)
         if not g2.passed:

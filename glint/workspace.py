@@ -3,24 +3,21 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import functools
 import logging
 import shutil
-import socket
-import sys
 import tempfile
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-
-import httpx
 
 from glint import config
 from glint.schemas import Patch
 
 logger = logging.getLogger(__name__)
 
-_PORT_START = 8200
-_PORT_END = 8999
 
 
 class PatchRejected(Exception):
@@ -93,60 +90,42 @@ def apply_patch(ws: Path, patch: Patch) -> tuple[list[str], int]:
     return files_changed, total_changed
 
 
-def _find_free_port() -> int:
-    """Find an available TCP port in 8200..8999 on 127.0.0.1."""
-    for port in range(_PORT_START, _PORT_END + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                sock.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-            return port
-    raise RuntimeError(f"No free port found in {_PORT_START}..{_PORT_END}")
+class _QuietHandler(SimpleHTTPRequestHandler):
+    """Static file handler that logs nothing and tells the browser not to cache."""
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+
+class _WorkspaceServer(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = 128  # the default backlog of 5 resets connections when several browsers load at once
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        logger.debug("workspace server: connection from %s dropped", client_address)
 
 
 @asynccontextmanager
 async def serve(ws: Path) -> AsyncIterator[str]:
-    """Serve ws over HTTP on a free port in 8200..8999, yielding its base URL."""
-    port = _find_free_port()
-    url = f"http://127.0.0.1:{port}"
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-m",
-        "http.server",
-        str(port),
-        "--bind",
-        "127.0.0.1",
-        "--directory",
-        str(ws),
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+    """Serve ws over HTTP from a thread in this process, yielding its base URL. Stops on exit.
+
+    Binds 127.0.0.1 port 0, so the OS picks a free port atomically and parallel calls never collide.
+    """
+    handler = functools.partial(_QuietHandler, directory=str(ws))
+    server = _WorkspaceServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, name="glint-workspace-server", daemon=True
     )
+    thread.start()
     try:
-        deadline = asyncio.get_running_loop().time() + 5.0
-        async with httpx.AsyncClient() as client:
-            while True:
-                if proc.returncode is not None:
-                    raise RuntimeError(f"http.server exited early with code {proc.returncode}")
-                try:
-                    resp = await client.get(url, timeout=0.5)
-                    if resp.status_code == 200:
-                        break
-                except httpx.HTTPError:
-                    pass
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise TimeoutError(f"http.server did not respond 200 within 5s at {url}")
-                await asyncio.sleep(0.05)
-        yield url
+        yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
-        if proc.returncode is None:
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=2.0)
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
+        await asyncio.to_thread(server.shutdown)
+        server.server_close()
 
 
 def unified_diff(app_dir: Path, ws: Path) -> str:
