@@ -2,6 +2,8 @@
 
 **Show Glint the bug. It tells you which fixes it can prove.**
 
+**Demo video:** [1-minute walkthrough](docs/demo/glint_submission_1min.mp4)
+
 Glint takes a screen recording of a bug in a web app, plus the app's source code, and works out what went
 wrong from the video alone. It writes an automated browser test that fails on the buggy app, writes four
 candidate fixes, and returns a fix only if it passes that test and a set of independent checks. If no fix
