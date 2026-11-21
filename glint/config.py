@@ -7,6 +7,7 @@ NEON = "gemini-4-neon"            # perceiver: video + audio + whole app -> Repr
 HYDROGEN = "gemini-4-hydrogen"    # generator: repro test, fix candidates (parallel)
 DECISION = "gemini-decision-1"    # gate: calibrated yes/no on video and screenshots
 DECISION_BOOL_TYPE = "noul"       # VERIFY at P0 against /docs/decisions-api. Fix here only.
+DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0, G1B, G4
 
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"

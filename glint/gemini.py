@@ -305,9 +305,9 @@ def image_block(png_path: Path) -> dict:
     return {"type": "image", "data": data, "mime_type": "image/png"}
 
 
-def video_block(ref: VideoRef) -> dict:
-    """Decision API video block pointing at a Files API URI."""
-    return {"type": "video", "uri": ref.uri, "mime_type": ref.mime_type}
+def video_block(ref: VideoRef, resolution: str = "low") -> dict:
+    """Decision API video block pointing at a Files API URI. Low resolution keeps long videos in budget."""
+    return {"type": "video", "uri": ref.uri, "mime_type": ref.mime_type, "resolution": resolution}
 
 
 async def decide(input_blocks: list[dict], questions: dict[str, str]) -> dict[str, float]:

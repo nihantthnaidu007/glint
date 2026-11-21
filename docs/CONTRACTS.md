@@ -115,6 +115,7 @@ NEON = "gemini-4-neon"            # perceiver: video + audio + whole app -> Repr
 HYDROGEN = "gemini-4-hydrogen"    # generator: repro test, fix candidates (parallel)
 DECISION = "gemini-decision-1"    # gate: calibrated yes/no on video and screenshots
 DECISION_BOOL_TYPE = "noul"       # VERIFY at P0 against /docs/decisions-api. Fix here only.
+DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0, G1B, G4
 
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"
@@ -331,7 +332,7 @@ async def neon(parts: list, schema: type[T] | None = None, thinking: str = NEON_
 async def hydrogen(parts: list, schema: type[T] | None = None, thinking: str = HYDROGEN_THINKING, temperature: float | None = None) -> T | str
 async def decide(input_blocks: list[dict], questions: dict[str, str]) -> dict[str, float]   # key -> p_yes
 def image_block(png_path: Path) -> dict                     # Decision API image block (base64)
-def video_block(ref: VideoRef) -> dict                      # Decision API video block (Files URI)
+def video_block(ref: VideoRef, resolution: str = "low") -> dict   # Decision API video block (Files URI)
 def usage_snapshot(run_id: str) -> Usage                    # tokens and cost accumulated for a run
 def bind_run(run_id: str) -> None                           # contextvar so every call is attributed to a run
 ```
@@ -456,12 +457,12 @@ Gate events for candidates carry `candidate_id`. Run-level gates (G0, G1, G1B) h
 
 ```
 input:      normalize -> REJECTED_INPUT on InputRejected
-g0:         decide(video, Q_G0) -> ABSTAIN if p_yes < TH_G0_IS_DEFECT
+g0:         decide(video at DECISION_VIDEO_RESOLUTION, Q_G0) -> ABSTAIN if p_yes < TH_G0_IS_DEFECT
 perceive:   neon(video + all app source with paths) -> ReproSpec; drop suspect_files that do not exist
             grab frames at evidence timestamps
 repro:      hydrogen -> repro_test.py; run; need failed_assertion REPRO_FAIL_RUNS times in a row
             failed_other or passed -> feed error back, retry up to REPRO_MAX_ATTEMPTS
-            G1B decide(video + repro_fail.png, Q_G1B) -> must pass
+            G1B decide(video + repro_fail.png + symptom text, Q_G1B) -> must pass
             after REPRO_MAX_ATTEMPTS without G1 and G1B -> ABSTAIN ("could not reproduce")
             repro_test.py is now FROZEN (hash recorded)
 candidates: N_CANDIDATES hydrogen calls in parallel (varied temperature), each a Patch
@@ -478,10 +479,17 @@ errors:     any exception -> caught, internal_error=True, status by stage (befor
 |---|---|---|
 | G0 | Decision: is this a bug video | p_yes ≥ TH_G0_IS_DEFECT |
 | G1 | Repro fails on the buggy app | failed_assertion 3 of 3 runs |
-| G1B | Decision: failure screenshot matches the video symptom | p_yes ≥ TH_G1B_SYMPTOM_MATCH |
+| G1B | Decision: failure screenshot matches the video symptom (inputs: video, screenshot, symptom text) | p_yes ≥ TH_G1B_SYMPTOM_MATCH |
 | G2 | Repro passes on the patched app | passed 2 of 2 runs |
 | G3 | Never worse | page loads, zero page errors and console errors during load and MONKEY_ACTIONS random actions, patch within file and line limits |
-| G4 | Decision: defect gone in the after screenshot | p_yes ≥ TH_G4_DEFECT_GONE |
+| G4 | Decision: defect gone in the after screenshot (inputs: video, screenshot, symptom text) | p_yes ≥ TH_G4_DEFECT_GONE |
+
+**Decision gate inputs (contract change "decision gates", 12:45):**
+- Every Decision gate passes the video with `video_block(ref, config.DECISION_VIDEO_RESOLUTION)` (`"high"`). `video_block` itself still defaults to `"low"`.
+- G1B and G4 pass three input blocks in this order: the video, the screenshot (`image_block`), and a text block with the spec's observed behavior, built by `perceive.symptom_block(spec)`: `{"type": "text", "text": "Reported incorrect behavior in the recording: <spec.observed>"}`. The question wording (`Q_G1B`, `Q_G4`) is unchanged.
+- Reason, measured on one recording: without the text block a screenshot of the buggy state scored 0.54 and a screenshot of the correct state 0.50. With it: 0.78 against 0.20. G0 scored 0.25 at `"low"` and 0.52 at `"high"`.
+
+**Stage progress callback:** `repro.establish_repro(video_ref, spec, app_dir, bundle_dir, emit)` takes `emit: Callable[[str, dict], Awaitable[None]] | None`, called as `await emit(event_type, data)` with the type and `data` payload from section 9. `pipeline.py` wraps it into `Event` objects, because only the pipeline owns `run_id` and `seq`. `perceive.perceive(video_ref, app_dir, duration_s=None)` clamps evidence timestamps when `duration_s` is given.
 
 **Robustness contract (garbage suite, `eval/garbage.py` generates, Person 1 makes pass):**
 
