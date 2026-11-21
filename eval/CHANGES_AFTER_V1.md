@@ -47,6 +47,8 @@ whose address leaves that origin is never clicked (checked again right before ea
 errors caused by those aborted requests are not counted. A test runs G3 on the unmodified app five times in
 a row.
 
-**The v1 numbers in RESULTS.md were produced with this bug present.** In the v1 scored run no Glint miss was
-recorded at G3 (six were at G4 and one at G1B), so the fix would not have changed a v1 verdict that we can
-see, but the runs were not repeated with the fix.
+**The v1 numbers in RESULTS.md were produced with this bug present.** In the saved v1 test runs the bug is
+visible once: on m016 (R0) candidate c1 was rejected at G3 with "Failed to load resource: the server responded
+with a status of 403". That run still ended VERIFIED_FIX through candidate c2 and was scored TRUE_FIX, so its
+verdict did not change. None of the 7 v1 misses failed at G3 (six at G4, one at G1B). The runs were not
+repeated with the fix, so its effect on other runs is not measured.
