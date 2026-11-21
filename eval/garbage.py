@@ -185,9 +185,8 @@ def make_garbage() -> None:
 
 
 async def _run_garbage_async() -> int:
-    from glint.pipeline import new_run_id, run_pipeline
-
     from glint import config
+    from glint.pipeline import new_run_id, run_pipeline
 
     expected = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))
     any_fail = False
