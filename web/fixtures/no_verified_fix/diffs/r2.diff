@@ -1,0 +1,7 @@
+--- a/view.js
++++ b/view.js
+@@ -116,6 +116,7 @@
+         updateElementCount: function () {
++            parameter = Math.max(0, parameter - 1);
+             self.$todoItemCounter.innerHTML = self.template.itemCounter(parameter);
+         },

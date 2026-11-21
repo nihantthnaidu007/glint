@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glint — Show the bug. Get a proven fix.</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <script src="/web/app.js" defer></script>
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <div class="header-left">
+        <a href="/" class="wordmark">
+          <span>Glint</span>
+          <span class="brand-dot" aria-hidden="true"></span>
+        </a>
+        <span id="replay-pill" class="replay-pill" hidden>REPLAY</span>
+      </div>
+      <div class="header-right">
+        <div class="app-select-wrap">
+          <label for="app-select" class="sr-only">Target application</label>
+          <select id="app-select" class="app-select" aria-label="Target application">
+            <option value="todomvc">TodoMVC (original)</option>
+          </select>
+        </div>
+        <div id="health-status" class="health-status" title="Backend health status">
+          <span id="health-dot" class="health-dot is-checking" aria-hidden="true"></span>
+          <span id="health-label">Checking</span>
+        </div>
+        <p class="tagline">Show the bug. Get a proven fix.</p>
+      </div>
+    </header>
+
+    <main class="main-stack">
+      <!-- 2. Capture card -->
+      <section id="capture-card" class="card capture-card" aria-labelledby="capture-heading">
+        <div id="drop-zone" class="drop-zone">
+          <div class="capture-top">
+            <div>
+              <h1 id="capture-heading" class="section-title">Capture</h1>
+              <p class="muted small">Record your screen showing the bug, or drop a video file (.mp4, .webm, .mov, .m4v, .mkv, max 200 MB, up to 90s).</p>
+            </div>
+            <div id="idle-actions" class="capture-actions">
+              <button type="button" id="record-btn" class="btn btn-primary">
+                <span class="btn-dot" aria-hidden="true"></span>
+                Record screen
+              </button>
+              <button type="button" id="upload-btn" class="btn btn-secondary">Upload video</button>
+              <input id="file-input" type="file" accept=".webm,.mp4,.mov,.m4v,.mkv,video/*" class="sr-only">
+            </div>
+          </div>
+
+          <div id="recording-controls" class="recording-bar" hidden>
+            <div class="recording-indicator">
+              <span class="pulse-dot" aria-hidden="true"></span>
+              <span class="recording-label">Recording</span>
+              <span id="record-timer" class="tabular-nums recording-timer">00:00 · 90s left</span>
+            </div>
+            <button type="button" id="stop-btn" class="btn btn-secondary">Stop</button>
+          </div>
+
+          <div id="preview-controls" class="preview-bar" hidden>
+            <div class="preview-media">
+              <video id="preview-video" class="preview-thumb" muted playsinline preload="metadata"></video>
+              <div class="preview-meta">
+                <div id="preview-name" class="preview-name">recording.webm</div>
+                <div id="preview-detail" class="muted small tabular-nums"></div>
+              </div>
+            </div>
+            <div class="preview-actions">
+              <button type="button" id="clear-btn" class="btn btn-ghost">Choose another</button>
+              <button type="button" id="analyze-btn" class="btn btn-primary">Analyze</button>
+            </div>
+          </div>
+
+          <div id="running-note" class="running-note" hidden>
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span id="running-text" class="small">Analyzing recording…</span>
+            <span id="running-id" class="muted small mono tabular-nums"></span>
+          </div>
+
+          <div id="capture-error" class="error-banner" role="alert" hidden></div>
+        </div>
+      </section>
+
+      <!-- 3. Stage rail -->
+      <nav id="stage-rail" class="card stage-rail" aria-label="Pipeline progress" hidden>
+        <ol id="stage-steps" class="stage-steps">
+          <li class="stage-step" data-step="watch">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Watch</span>
+          </li>
+          <li class="stage-step" data-step="understand">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Understand</span>
+          </li>
+          <li class="stage-step" data-step="reproduce">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Reproduce</span>
+          </li>
+          <li class="stage-step" data-step="fix">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Fix</span>
+          </li>
+          <li class="stage-step" data-step="verify">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Verify</span>
+          </li>
+          <li class="stage-step" data-step="verdict">
+            <span class="stage-node" aria-hidden="true"><span class="stage-dot"></span></span>
+            <span class="stage-name">Verdict</span>
+          </li>
+        </ol>
+        <div id="stage-shimmer" class="stage-shimmer" aria-hidden="true"></div>
+      </nav>
+
+      <!-- 4. Evidence card -->
+      <section id="evidence-card" class="card" aria-labelledby="evidence-heading" hidden>
+        <div class="card-header">
+          <h2 id="evidence-heading" class="section-title">Evidence</h2>
+          <span id="g0-line" class="gate-pill" hidden></span>
+        </div>
+        <div class="two-col evidence-grid">
+          <div class="evidence-video-col">
+            <div class="video-frame">
+              <video id="evidence-video" controls preload="metadata" playsinline></video>
+            </div>
+            <div id="evidence-timeline-wrap" class="timeline-wrap">
+              <div id="evidence-timeline" class="timeline-track" role="slider" tabindex="0" aria-label="Video evidence timeline" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="timeline-progress" class="timeline-progress"></div>
+                <div id="evidence-ticks" class="timeline-ticks"></div>
+              </div>
+              <div id="timeline-tooltip" class="timeline-tooltip" hidden></div>
+              <div class="timeline-caption">
+                <span id="timeline-current" class="muted small tabular-nums">0.0s</span>
+                <span class="muted small">Click amber ticks to jump to key moments</span>
+                <span id="timeline-duration" class="muted small tabular-nums">0.0s</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="spec-panel" class="spec-panel">
+            <p id="spec-pending" class="muted small">Waiting for Neon to read the recording…</p>
+            <div id="spec-content" hidden>
+              <div class="spec-block">
+                <h3 class="spec-label">Summary</h3>
+                <p id="spec-summary" class="spec-text"></p>
+              </div>
+              <div class="spec-block">
+                <h3 class="spec-label">Steps</h3>
+                <ol id="spec-steps" class="spec-steps"></ol>
+              </div>
+              <div class="spec-pair">
+                <div class="spec-block">
+                  <h3 class="spec-label">Expected</h3>
+                  <p id="spec-expected" class="spec-text small"></p>
+                </div>
+                <div class="spec-block">
+                  <h3 class="spec-label">Observed</h3>
+                  <p id="spec-observed" class="spec-text small"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Reproduction card -->
+      <section id="repro-card" class="card" aria-labelledby="repro-heading" hidden>
+        <div class="card-header">
+          <h2 id="repro-heading" class="section-title">Reproduction</h2>
+        </div>
+        <div class="two-col repro-grid">
+          <div class="repro-shot-col">
+            <figure class="shot-figure">
+              <div id="repro-shot-placeholder" class="shot-placeholder muted small">Running reproduction test…</div>
+              <img id="repro-screenshot" class="shot-img" alt="Failing reproduction screenshot on the buggy application" hidden>
+              <figcaption class="muted small">Failing reproduction screenshot</figcaption>
+            </figure>
+          </div>
+          <div class="repro-info-col">
+            <div id="repro-status-block" class="repro-status-block"></div>
+            <div id="g1b-line" class="repro-g1b" hidden></div>
+            <div id="repro-attempts-list" class="repro-attempts"></div>
+            <details id="repro-test-details" class="disclosure" hidden>
+              <summary class="disclosure-summary">View test</summary>
+              <pre class="code-block"><code id="repro-test-code"></code></pre>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Fix lanes card -->
+      <section id="lanes-card" class="card" aria-labelledby="lanes-heading" hidden>
+        <div class="card-header">
+          <h2 id="lanes-heading" class="section-title">Fix lanes</h2>
+          <span id="lanes-subtitle" class="muted small">Parallel candidate patches</span>
+        </div>
+        <div id="lanes-list" class="lanes-list"></div>
+      </section>
+
+      <!-- 7. Verdict card -->
+      <section id="verdict-card" class="card verdict-card" aria-labelledby="verdict-word" hidden>
+        <div id="verdict-banner" class="verdict-banner">
+          <div class="verdict-head">
+            <div class="verdict-title-row">
+              <span id="verdict-icon" class="verdict-icon" aria-hidden="true"></span>
+              <h2 id="verdict-word" class="verdict-word"></h2>
+            </div>
+            <div class="verdict-actions">
+              <span id="verdict-meta" class="muted small tabular-nums"></span>
+              <button type="button" id="replay-btn" class="btn btn-secondary btn-sm" hidden>Replay run</button>
+            </div>
+          </div>
+          <p id="verdict-reason" class="verdict-reason"></p>
+          <div id="verdict-shimmer" class="verdict-shimmer" aria-hidden="true"></div>
+        </div>
+
+        <div id="verdict-proof" class="verdict-proof" hidden>
+          <div id="compare-section" class="compare-section" hidden>
+            <h3 class="spec-label">Before and after</h3>
+            <div id="compare-box" class="compare-box">
+              <img id="compare-before" class="compare-img" alt="Before fix (failing reproduction screenshot)">
+              <div id="compare-after-wrap" class="compare-after-wrap">
+                <img id="compare-after" class="compare-img" alt="After fix (verified application screenshot)">
+              </div>
+              <span class="compare-tag compare-tag-before">Before</span>
+              <span class="compare-tag compare-tag-after">After</span>
+              <div
+                id="compare-divider"
+                class="compare-divider"
+                role="slider"
+                tabindex="0"
+                aria-label="Compare before and after screenshots"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="50"
+              >
+                <div class="compare-handle" aria-hidden="true">↔</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="diff-section" class="diff-section" hidden>
+            <div class="diff-header">
+              <h3 class="spec-label">Verified patch</h3>
+              <span id="diff-file-label" class="muted small mono"></span>
+            </div>
+            <div id="diff-viewer" class="diff-viewer" role="region" aria-label="Unified diff"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. Results strip -->
+      <section id="results-strip" class="card results-strip" aria-labelledby="results-heading" hidden>
+        <div class="card-header">
+          <h2 id="results-heading" class="section-title">Evaluation results</h2>
+        </div>
+        <div class="table-wrap">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th scope="col">System</th>
+                <th scope="col" class="num">True fixes</th>
+                <th scope="col" class="num">Right when claiming fixed</th>
+                <th scope="col" class="num">Wrong fixes shipped</th>
+                <th scope="col" class="num">Abstained</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
+        <p id="results-footnote" class="muted small results-footnote"></p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

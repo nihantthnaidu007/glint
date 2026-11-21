@@ -1,0 +1,8 @@
+--- a/view.js
++++ b/view.js
+@@ -118,6 +118,8 @@
+         updateElementCount: function () {
++            var activeNodes = self.$todoList.querySelectorAll("li:not(.completed)");
++            self.$todoItemCounter.innerHTML = self.template.itemCounter(activeNodes.length);
+             self.$todoItemCounter.innerHTML = self.template.itemCounter(parameter);
+         },

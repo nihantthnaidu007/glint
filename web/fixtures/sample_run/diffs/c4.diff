@@ -1,0 +1,9 @@
+--- a/controller.js
++++ b/controller.js
+@@ -214,7 +214,7 @@
+     Controller.prototype._updateCount = function () {
+         var self = this;
+         self.model.getCount(function (todos) {
+-            self.view.render("updateElementCount", todos.total);
++            self.view.render("updateElementCount", todos.completed);
+             self.view.render("clearCompletedButton", {
