@@ -6,6 +6,7 @@ import logging
 import random
 import shutil
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from playwright.async_api import Page, async_playwright
 
@@ -78,6 +79,16 @@ async def _monkey_step(page: Page, rng: random.Random) -> None:
         await target.click(timeout=ACTION_TIMEOUT_MS)
 
 
+def is_favicon_load_error(text: str, url: str) -> bool:
+    """True only for the browser's own failed request for /favicon.ico, which the app did not cause."""
+    return text.startswith("Failed to load resource") and urlsplit(url).path == "/favicon.ico"
+
+
+def _on_console(kind: str, text: str, url: str, errors: list[str]) -> None:
+    if kind == "error" and not is_favicon_load_error(text, url):
+        errors.append(f"console error: {text}")
+
+
 async def monkey_check(base_url: str, actions: int = config.MONKEY_ACTIONS, seed: int = MONKEY_SEED) -> list[str]:
     """Load the app and perform seeded random actions. Returns every page error and console error seen."""
     errors: list[str] = []
@@ -87,7 +98,7 @@ async def monkey_check(base_url: str, actions: int = config.MONKEY_ACTIONS, seed
         try:
             page = await browser.new_page(viewport=VIEWPORT)
             page.on("pageerror", lambda exc: errors.append(f"page error: {exc}"))
-            page.on("console", lambda msg: errors.append(f"console error: {msg.text}") if msg.type == "error" else None)
+            page.on("console", lambda msg: _on_console(msg.type, msg.text, msg.location.get("url", ""), errors))
             page.on("dialog", lambda dialog: asyncio.ensure_future(dialog.dismiss()))
             try:
                 await page.goto(base_url, wait_until="load", timeout=LOAD_TIMEOUT_MS)

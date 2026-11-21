@@ -71,3 +71,16 @@ def test_repair_feedback_has_only_gate_and_message() -> None:
     text = patch.failure_feedback([failed])
     assert "G2" in text and "AssertionError: expected 2 items" in text
     assert "SECRET" not in text
+
+
+def test_g3_ignores_only_the_favicon_load_error() -> None:
+    failed = "Failed to load resource: the server responded with a status of 404 (File not found)"
+    assert gates.is_favicon_load_error(failed, "http://127.0.0.1:5000/favicon.ico")
+    assert not gates.is_favicon_load_error(failed, "http://127.0.0.1:5000/app.js")
+    assert not gates.is_favicon_load_error(failed, "http://127.0.0.1:5000/img/favicon.ico")
+    assert not gates.is_favicon_load_error("Uncaught TypeError: x is not a function", "http://127.0.0.1:5000/favicon.ico")
+    errors: list[str] = []
+    gates._on_console("error", failed, "http://127.0.0.1:5000/favicon.ico", errors)
+    gates._on_console("warning", "just a warning", "", errors)
+    gates._on_console("error", failed, "http://127.0.0.1:5000/store.js", errors)
+    assert errors == [f"console error: {failed}"]

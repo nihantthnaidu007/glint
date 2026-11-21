@@ -145,15 +145,41 @@ def _g4_p(c: Candidate) -> float:
     return next((g.p_yes or 0.0 for g in c.gates if g.gate == "G4"), 0.0)
 
 
+def _gate_passed(c: Candidate, gate: str) -> bool:
+    return any(g.gate == gate and g.passed for g in c.gates)
+
+
+def select_winner(candidates: list[Candidate]) -> tuple[Candidate | None, str]:
+    """Pick the verified candidate, if any. Returns (winner, basis text for the reason sentence).
+
+    A candidate that passed G2 and G3 is verified if G4 passed, or if its patch is identical (same files,
+    same contents) to at least CONSENSUS_MIN - 1 other candidates that also passed G2 and G3.
+    G4-passing winners are preferred: fewest changed lines, then highest G4 probability.
+    """
+    functional = [c for c in candidates if c.patch is not None and _gate_passed(c, "G2") and _gate_passed(c, "G3")]
+    visual = sorted((c for c in functional if _gate_passed(c, "G4")), key=lambda c: (c.lines_changed, -_g4_p(c)))
+    if visual:
+        return visual[0], "visual check passed"
+    groups: dict[tuple[tuple[str, str], ...], list[Candidate]] = {}
+    for c in functional:
+        assert c.patch is not None
+        groups.setdefault(tuple(sorted(c.patch.files.items())), []).append(c)
+    agreeing = max(groups.values(), key=len, default=[])
+    if len(agreeing) >= config.CONSENSUS_MIN:
+        with_patch = sum(1 for c in candidates if c.patch is not None)
+        basis = f"{len(agreeing)} of {with_patch} independent fixes agree; visual check inconclusive"
+        return agreeing[0], basis
+    return None, ""
+
+
 def _select(run: _Run) -> tuple[Status, str | None, str]:
-    """Pick the winner among survivors: fewest changed lines, then highest G4 probability."""
-    survivors = sorted((c for c in run.candidates if c.survived), key=lambda c: (c.lines_changed, -_g4_p(c)))
-    if not survivors:
+    """Verdict from the candidates checked so far."""
+    winner, basis = select_winner(run.candidates)
+    if winner is None:
         return "NO_VERIFIED_FIX", None, "No candidate fix passed every check, so Glint returns the failing test only."
-    winner = survivors[0]
     lines = "1 line" if winner.lines_changed == 1 else f"{winner.lines_changed} lines"
     files = ", ".join(winner.files_changed) or "the app"
-    return "VERIFIED_FIX", winner.id, f"Verified fix {winner.id} changed {lines} in {files}."
+    return "VERIFIED_FIX", winner.id, f"Verified fix {winner.id} changed {lines} in {files} ({basis})."
 
 
 # --- stages -------------------------------------------------------------------------------------
@@ -282,7 +308,7 @@ async def _stage_candidates(
     run.stage = "candidates"
     initial = await patch.candidates(spec, app_dir, config.N_CANDIDATES)
     await _check_all(run, initial, app_dir, test_path, video_ref, spec)
-    if not allow_repair or any(c.survived for c in run.candidates):
+    if not allow_repair or select_winner(run.candidates)[0] is not None:
         return
     # A repair round can only help when some candidate failed a check that a different patch could pass.
     # When every candidate already passed G2 and G3 and was stopped only by G4, new patches would be the same.

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from glint import config, gemini, patch, perceive, pipeline, repro
-from glint.schemas import Event, GateResult, ReproSpec, RunResult
+from glint.schemas import Candidate, Event, GateResult, Patch, ReproSpec, RunResult
 
 APP = Path(__file__).resolve().parent.parent / "apps" / "todomvc"
 
@@ -216,3 +216,44 @@ async def test_crlf_repro_test_does_not_break_the_freeze_check(
     assert result.internal_error is False
     assert result.status == "NO_VERIFIED_FIX" and result.stage_reached == "select"
     assert "changed after it was frozen" not in result.reason
+
+
+def _cand(cid: str, content: str, g2: bool = True, g3: bool = True, g4: float | None = 0.2, lines: int = 2) -> Candidate:
+    gates_ = [GateResult(gate="G2", passed=g2, candidate_id=cid)]
+    if g2:
+        gates_.append(GateResult(gate="G3", passed=g3, candidate_id=cid))
+    if g2 and g3 and g4 is not None:
+        gates_.append(GateResult(gate="G4", passed=g4 >= config.TH_G4_DEFECT_GONE, p_yes=g4, candidate_id=cid))
+    survived = all(g.passed for g in gates_) and len(gates_) == 3
+    return Candidate(
+        id=cid, source="initial", patch=Patch(files={"app.js": content}), gates=gates_, survived=survived,
+        lines_changed=lines, files_changed=["app.js"],
+    )
+
+
+def test_select_winner_prefers_a_g4_pass() -> None:
+    cands = [_cand("c1", "A"), _cand("c2", "A"), _cand("c3", "A"), _cand("c4", "B", g4=0.9)]
+    winner, basis = pipeline.select_winner(cands)
+    assert winner is not None and winner.id == "c4" and basis == "visual check passed"
+
+
+def test_select_winner_consensus_when_g4_is_inconclusive() -> None:
+    cands = [_cand("c1", "A"), _cand("c2", "A"), _cand("c3", "A"), _cand("c4", "A")]
+    winner, basis = pipeline.select_winner(cands)
+    assert winner is not None and winner.id == "c1"
+    assert basis == "4 of 4 independent fixes agree; visual check inconclusive"
+    three = [_cand("c1", "A"), _cand("c2", "B"), _cand("c3", "A"), _cand("c4", "A")]
+    winner, basis = pipeline.select_winner(three)
+    assert winner is not None and winner.id == "c1" and basis.startswith("3 of 4 independent fixes agree")
+
+
+def test_select_winner_needs_enough_identical_patches_that_passed_g2_and_g3() -> None:
+    assert pipeline.select_winner([_cand("c1", "A"), _cand("c2", "A"), _cand("c3", "B"), _cand("c4", "C")]) == (None, "")
+    # identical text, but one failed G2 and one failed G3: only two functional candidates agree
+    cands = [_cand("c1", "A"), _cand("c2", "A"), _cand("c3", "A", g2=False), _cand("c4", "A", g3=False)]
+    assert pipeline.select_winner(cands) == (None, "")
+    # same content in a different file is not the same patch
+    other = _cand("c3", "A")
+    other.patch = Patch(files={"view.js": "A"})
+    assert pipeline.select_winner([_cand("c1", "A"), _cand("c2", "A"), other]) == (None, "")
+    assert pipeline.select_winner([]) == (None, "")

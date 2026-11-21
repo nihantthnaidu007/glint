@@ -40,6 +40,7 @@ PATCH_MAX_FILES = 2
 PATCH_MAX_CHANGED_LINES = 40
 PATCH_ALLOWED_EXT = {".js", ".html"}
 MONKEY_ACTIONS = 30               # G3 random actions on the patched app
+CONSENSUS_MIN = 3                 # v2: identical patches that passed G2 and G3 needed to verify without G4
 
 # Gate thresholds (tuned on dev split only, then frozen at 14:35)
 TH_G0_IS_DEFECT = 0.10            # abstain if p_yes < this (advisory in practice, see CONTRACTS section 10)

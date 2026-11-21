@@ -148,6 +148,7 @@ PATCH_MAX_FILES = 2
 PATCH_MAX_CHANGED_LINES = 40
 PATCH_ALLOWED_EXT = {".js", ".html"}
 MONKEY_ACTIONS = 30               # G3 random actions on the patched app
+CONSENSUS_MIN = 3                 # v2: identical patches that passed G2 and G3 needed to verify without G4
 
 # Gate thresholds (tuned on dev split only, then frozen at 14:35)
 TH_G0_IS_DEFECT = 0.10            # abstain if p_yes < this (advisory in practice, see CONTRACTS section 10)
@@ -494,6 +495,8 @@ errors:     any exception -> caught, internal_error=True, status by stage (befor
 - Reason, measured on one recording: without the text block a screenshot of the buggy state scored 0.54 and a screenshot of the correct state 0.50. With it: 0.78 against 0.20. G0 scored 0.25 at `"low"` and 0.52 at `"high"`.
 
 - G4 (contract change "tune gates on dev", 14:00) does not use the video. It passes three blocks in this order: the failing-repro screenshot `shots/repro_fail.png` (before), the candidate's `shots/<cid>_after.png` (after), and a text block built by `gates.outcome_block(spec)`: `Observed incorrect behavior (the bug): <spec.observed>` and `Expected correct behavior after the same steps: <spec.expected>`. `Q_G4` is "The first image shows the bug. Does the second image show the expected behavior with the bug gone?". Measured on 17 labeled dev screenshots (6 answer-key fixes, 11 still-buggy or wrong-fix states): the previous G4 could not reach zero false passes without rejecting all 6 correct fixes; this variant at 0.68 accepts 5 of 6 correct fixes and no wrong state (highest wrong state 0.62, lowest accepted fix 0.73).
+
+**v2 consensus rule (contract change after the v1 scored run, see eval/CHANGES_AFTER_V1.md).** `pipeline.select_winner(candidates)` verifies a candidate that passed G2 and G3 if G4 passed, OR if its patch is identical (same files, same contents) to at least `CONSENSUS_MIN - 1` other candidates that also passed G2 and G3. G4-passing winners are preferred. The reason sentence ends with "(visual check passed)" or "(N of M independent fixes agree; visual check inconclusive)". G3 ignores one console error only: a failed load of `/favicon.ico`.
 
 **G0 is advisory in practice (contract change "tune gates on dev", 14:00).** On 7 dev bug videos, 2 clean videos and the black garbage video, no question wording or resolution separated bugs from non-bugs: at high resolution bugs scored 0.22 to 0.87, clean videos 0.41 and 0.84, black 0.44. `TH_G0_IS_DEFECT` is therefore 0.10, below every bug video seen, so G0 is recorded and shown but stops almost nothing. The runs that must not produce a fix are stopped later: with G0 bypassed, both clean videos and the black video ended in ABSTAIN at the repro stage (G1 or G1B).
 
