@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from playwright.async_api import Page, async_playwright
+from playwright.async_api import Page, Route, async_playwright
 
 from glint import config, gemini, workspace
 from glint.gemini import VideoRef
@@ -46,16 +46,23 @@ INTERACTIVE_JS = """
     if (rect.width < 2 || rect.height < 2) return;
     if (style.visibility === 'hidden' || style.display === 'none' || el.disabled) return;
     const tag = el.tagName.toLowerCase();
-    if (tag === 'a') {
-      const href = el.getAttribute('href') || '';
-      if (!(href === '' || href.startsWith('#'))) return;
-    }
+    const link = el.closest('a[href]');
+    if (link && new URL(link.href, window.location.href).origin !== window.location.origin) return;
     out.push({ index: index, tag: tag, type: (el.getAttribute('type') || '').toLowerCase() });
   });
   return out;
 }
 """
 INTERACTIVE_SELECTOR = "a, button, input, textarea, select, label, li"
+
+# Checked again right before each action, because the page can change between choosing an element and acting.
+LEAVES_ORIGIN_JS = """
+(el) => {
+  const link = el.closest('a[href]');
+  return !!link && new URL(link.href, window.location.href).origin !== window.location.origin;
+}
+"""
+LOCAL_SCHEMES = ("data", "blob", "about")
 
 
 async def _monkey_step(page: Page, rng: random.Random) -> None:
@@ -64,6 +71,8 @@ async def _monkey_step(page: Page, rng: random.Random) -> None:
         return
     el = rng.choice(elements)
     target = page.locator(INTERACTIVE_SELECTOR).nth(el["index"])
+    if await target.evaluate(LEAVES_ORIGIN_JS, timeout=ACTION_TIMEOUT_MS):
+        return  # never click a link that leaves the app
     roll = rng.random()
     is_text_input = el["tag"] == "textarea" or (
         el["tag"] == "input" and el["type"] in ("", "text", "search")
@@ -84,21 +93,51 @@ def is_favicon_load_error(text: str, url: str) -> bool:
     return text.startswith("Failed to load resource") and urlsplit(url).path == "/favicon.ico"
 
 
-def _on_console(kind: str, text: str, url: str, errors: list[str]) -> None:
-    if kind == "error" and not is_favicon_load_error(text, url):
-        errors.append(f"console error: {text}")
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _on_console(kind: str, text: str, url: str, errors: list[str], blocked: set[str] | None = None) -> None:
+    """Record a console error, except the favicon request and requests G3 itself blocked."""
+    if kind != "error" or is_favicon_load_error(text, url):
+        return
+    if blocked and text.startswith("Failed to load resource") and url in blocked:
+        return
+    errors.append(f"console error: {text}")
 
 
 async def monkey_check(base_url: str, actions: int = config.MONKEY_ACTIONS, seed: int = MONKEY_SEED) -> list[str]:
-    """Load the app and perform seeded random actions. Returns every page error and console error seen."""
+    """Load the app and perform seeded random actions. Returns every page error and console error seen.
+
+    Requests to any other origin are aborted, links that leave the app are never clicked, and console
+    errors caused by those aborted requests are not counted.
+    """
     errors: list[str] = []
     rng = random.Random(seed)
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
-            page = await browser.new_page(viewport=VIEWPORT)
+            context = await browser.new_context(viewport=VIEWPORT)
+            own_origin = _origin(base_url)
+            blocked: set[str] = set()
+
+            async def keep_local(route: Route) -> None:
+                url = route.request.url
+                if _origin(url) == own_origin or urlsplit(url).scheme in LOCAL_SCHEMES:
+                    await route.continue_()
+                else:
+                    blocked.add(url)
+                    await route.abort()
+
+            # G3 never touches anything but the workspace's own server: no request may leave its origin.
+            await context.route("**/*", keep_local)
+            page = await context.new_page()
             page.on("pageerror", lambda exc: errors.append(f"page error: {exc}"))
-            page.on("console", lambda msg: _on_console(msg.type, msg.text, msg.location.get("url", ""), errors))
+            page.on(
+                "console",
+                lambda msg: _on_console(msg.type, msg.text, msg.location.get("url", ""), errors, blocked),
+            )
             page.on("dialog", lambda dialog: asyncio.ensure_future(dialog.dismiss()))
             try:
                 await page.goto(base_url, wait_until="load", timeout=LOAD_TIMEOUT_MS)

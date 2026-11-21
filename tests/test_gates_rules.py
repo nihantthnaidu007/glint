@@ -84,3 +84,38 @@ def test_g3_ignores_only_the_favicon_load_error() -> None:
     gates._on_console("warning", "just a warning", "", errors)
     gates._on_console("error", failed, "http://127.0.0.1:5000/store.js", errors)
     assert errors == [f"console error: {failed}"]
+
+
+async def test_g3_passes_on_unmodified_app_five_times_in_a_row() -> None:
+    ws = workspace.make_workspace(APP)
+    async with workspace.serve(ws) as url:
+        for attempt in range(5):
+            assert await gates.monkey_check(url) == [], f"run {attempt + 1} of 5 reported errors"
+
+
+async def test_g3_never_leaves_the_app_origin(tmp_path: Path) -> None:
+    """External links are not clicked and external requests are aborted without counting as app errors."""
+    (tmp_path / "index.html").write_text(
+        """<!DOCTYPE html><html><body>
+        <a id="out" href="http://external.invalid/away">external link</a>
+        <li><a href="https://external.invalid/other">external link inside a list item</a></li>
+        <a href="#/local">local link</a>
+        <button id="b" onclick="document.title = 'clicked'">button</button>
+        <img src="http://external.invalid/pixel.png" width="10" height="10">
+        <script>window.addEventListener('beforeunload', () => { localStorage.setItem('left', '1'); });</script>
+        </body></html>""",
+        encoding="utf-8",
+    )
+    async with workspace.serve(tmp_path) as url:
+        assert await gates.monkey_check(url, actions=40) == []
+
+
+def test_g3_console_filter_for_blocked_requests() -> None:
+    failed = "Failed to load resource: net::ERR_FAILED"
+    errors: list[str] = []
+    blocked = {"http://external.invalid/pixel.png"}
+    gates._on_console("error", failed, "http://external.invalid/pixel.png", errors, blocked)
+    assert errors == []
+    gates._on_console("error", failed, "http://127.0.0.1:5000/store.js", errors, blocked)
+    gates._on_console("error", "Uncaught TypeError: boom", "http://external.invalid/pixel.png", errors, blocked)
+    assert errors == [f"console error: {failed}", "console error: Uncaught TypeError: boom"]

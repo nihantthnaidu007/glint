@@ -34,3 +34,19 @@ scored by the same oracle, after the same controls.
 
 Agreement between candidates is not independent evidence in the way G4 is: the four candidates come from the
 same model reading the same bug report, so they can agree on the same wrong fix. G2 and G3 still apply.
+
+## Bug fix after v1: G3 could leave the app (found Nov 21 2026, about 15:50)
+
+G3 (the never-worse check) performs random clicks on the patched app. It chose an element and then clicked it
+by position in the page, so when the page changed in between, the click could land on one of the external
+links in the TodoMVC footer credits. That request went to the public internet, came back as an error, and was
+counted as a console error, so a correct fix could be rejected at random.
+
+Fix in `glint/gates.py`: during G3 every request that is not to the workspace's own origin is aborted, a link
+whose address leaves that origin is never clicked (checked again right before each action), and console
+errors caused by those aborted requests are not counted. A test runs G3 on the unmodified app five times in
+a row.
+
+**The v1 numbers in RESULTS.md were produced with this bug present.** In the v1 scored run no Glint miss was
+recorded at G3 (six were at G4 and one at G1B), so the fix would not have changed a v1 verdict that we can
+see, but the runs were not repeated with the fix.
