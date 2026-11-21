@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m011",
+  "app_id": "todomvc",
+  "file": "template.js",
+  "line": 92,
+  "operator": "comparison_flip",
+  "original_snippet": "return `<strong>${activeTodos}</strong> item${plural} left`;",
+  "mutated_snippet": "return `<strong>${activeTodos}</strong<= item${plural} left`;",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "test"
+}

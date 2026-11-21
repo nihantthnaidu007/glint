@@ -1,0 +1,39 @@
+{
+  "mutant_id": "m014",
+  "app_id": "todomvc",
+  "file": "view.js",
+  "line": 38,
+  "operator": "swap_args",
+  "original_snippet": "View.prototype._clearCompletedButton = function (completedCount, visible) {",
+  "mutated_snippet": "View.prototype._clearCompletedButton = function (visible, completedCount) {",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "read book",
+      "step": 0
+    },
+    {
+      "kind": "check",
+      "domIdx": 1,
+      "step": 1
+    },
+    {
+      "kind": "click",
+      "domIdx": 11,
+      "step": 2
+    },
+    {
+      "kind": "click",
+      "domIdx": 4,
+      "step": 3
+    },
+    {
+      "kind": "click",
+      "domIdx": 12,
+      "step": 4
+    }
+  ],
+  "split": "test"
+}

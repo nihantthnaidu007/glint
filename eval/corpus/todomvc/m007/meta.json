@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m007",
+  "app_id": "todomvc",
+  "file": "template.js",
+  "line": 67,
+  "operator": "bool_negation",
+  "original_snippet": "if (data[i].completed) {",
+  "mutated_snippet": "if (!(data[i].completed)) {",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "dev"
+}

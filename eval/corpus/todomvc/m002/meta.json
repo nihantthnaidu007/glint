@@ -1,0 +1,12 @@
+{
+  "mutant_id": "m002",
+  "app_id": "todomvc",
+  "file": "store.js",
+  "line": 71,
+  "operator": "delete_stmt",
+  "original_snippet": "callback.call(this, JSON.parse(MemoryStorage[this._dbName]).todos);",
+  "mutated_snippet": "/* deleted */",
+  "seed": 7,
+  "divergent_sequence": [],
+  "split": "dev"
+}

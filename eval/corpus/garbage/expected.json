@@ -1,0 +1,41 @@
+{
+  "corrupt": {
+    "file": "eval/corpus/garbage/corrupt.mp4",
+    "app": "apps/todomvc",
+    "allowed": [
+      "REJECTED_INPUT"
+    ]
+  },
+  "too_short": {
+    "file": "eval/corpus/garbage/too_short.mp4",
+    "app": "apps/todomvc",
+    "allowed": [
+      "REJECTED_INPUT"
+    ]
+  },
+  "black": {
+    "file": "eval/corpus/garbage/black.mp4",
+    "app": "apps/todomvc",
+    "allowed": [
+      "ABSTAIN"
+    ]
+  },
+  "long": {
+    "file": "eval/corpus/garbage/long.mp4",
+    "app": "eval/corpus/todomvc/m001/app",
+    "allowed": [
+      "VERIFIED_FIX",
+      "NO_VERIFIED_FIX",
+      "ABSTAIN",
+      "REJECTED_INPUT"
+    ]
+  },
+  "clean_use": {
+    "file": "eval/corpus/garbage/clean_use.webm",
+    "app": "apps/todomvc",
+    "allowed": [
+      "ABSTAIN",
+      "NO_VERIFIED_FIX"
+    ]
+  }
+}
