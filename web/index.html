@@ -214,6 +214,7 @@
               <button type="button" id="replay-btn" class="btn btn-secondary btn-sm" hidden>Replay run</button>
             </div>
           </div>
+          <p id="verdict-note" class="verdict-note" hidden></p>
           <p id="verdict-reason" class="verdict-reason"></p>
           <div id="verdict-shimmer" class="verdict-shimmer" aria-hidden="true"></div>
         </div>
@@ -245,7 +246,7 @@
 
           <div id="diff-section" class="diff-section" hidden>
             <div class="diff-header">
-              <h3 class="spec-label">Verified patch</h3>
+              <h3 id="diff-heading" class="spec-label">Verified patch</h3>
               <span id="diff-file-label" class="muted small mono"></span>
             </div>
             <div id="diff-viewer" class="diff-viewer" role="region" aria-label="Unified diff"></div>
