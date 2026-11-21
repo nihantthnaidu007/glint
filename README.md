@@ -49,6 +49,8 @@ Scored once on a test set that was frozen before the run. This table is copied f
 "Derived" means the saved v1 Glint runs were recounted under the v2 selection rule from their saved
 candidates and gate results, with no model called again; newly claimed fixes were scored by the same oracle.
 
+Per-run records: eval/results/test_v1 and eval/results/test_v2_derived.
+
 What these numbers say:
 
 - **The single Neon call fixed more bugs**: 95.2%, against 66.7% for Glint v1 and 85.7% for Glint v2. The

@@ -1,0 +1,30 @@
+{
+  "mutant_id": "m012",
+  "kind": "bug",
+  "split": "test",
+  "rung": "r0",
+  "system": "baseline",
+  "status": "PATCH",
+  "claimed_fix": true,
+  "oracle": "TRUE_FIX",
+  "oracle_detail": "",
+  "patch": {
+    "files": {
+      "model.js": "(function (window) {\n    \"use strict\";\n\n    /**\n     * Creates a new Model instance and hooks up the storage.\n     *\n     * @constructor\n     * @param {object} storage A reference to the client side storage class\n     */\n    function Model(storage) {\n        this.storage = storage;\n    }\n\n    /**\n     * Creates a new todo model\n     *\n     * @param {string} [title] The title of the task\n     * @param {function} [callback] The callback to fire after the model is created\n     */\n    Model.prototype.create = function (title, callback) {\n        title = title || \"\";\n        callback = callback || function () {};\n\n        var newItem = {\n            title: title.trim(),\n            completed: false,\n        };\n\n        this.storage.save(newItem, callback);\n    };\n\n    /**\n     * Finds and returns a model in storage. If no query is given it'll simply\n     * return everything. If you pass in a string or number it'll look that up as\n     * the ID of the model to find. Lastly, you can pass it an object to match\n     * against.\n     *\n     * @param {string|number|object} [query] A query to match models against\n     * @param {function} [callback] The callback to fire after the model is found\n     *\n     * @example\n     * model.read(1, func); // Will find the model with an ID of 1\n     * model.read('1'); // Same as above\n     * //Below will find a model with foo equalling bar and hello equalling world.\n     * model.read({ foo: 'bar', hello: 'world' });\n     */\n    Model.prototype.read = function (query, callback) {\n        var queryType = typeof query;\n        callback = callback || function () {};\n\n        if (queryType === \"function\") {\n            callback = query;\n            return this.storage.findAll(callback);\n        } else if (queryType === \"string\" || queryType === \"number\") {\n            query = parseInt(query, 10);\n            return this.storage.find({ id: query }, callback);\n        } else {\n            return this.storage.find(query, callback);\n        }\n    };\n\n    /**\n     * Updates a model by giving it an ID, data to update, and a callback to fire when\n     * the update is complete.\n     *\n     * @param {number} id The id of the model to update\n     * @param {object} data The properties to update and their new value\n     * @param {function} callback The callback to fire when the update is complete.\n     */\n    Model.prototype.update = function (id, data, callback) {\n        this.storage.save(data, callback, id);\n    };\n\n    /**\n     * Removes a model from storage\n     *\n     * @param {number} id The ID of the model to remove\n     * @param {function} callback The callback to fire when the removal is complete.\n     */\n    Model.prototype.remove = function (id, callback) {\n        this.storage.remove(id, callback);\n    };\n\n    /**\n     * WARNING: Will remove ALL data from storage.\n     *\n     * @param {function} callback The callback to fire when the storage is wiped.\n     */\n    Model.prototype.removeAll = function (callback) {\n        this.storage.drop(callback);\n    };\n\n    /**\n     * Returns a count of all todos\n     */\n    Model.prototype.getCount = function (callback) {\n        var todos = {\n            active: 0,\n            completed: 0,\n            total: 0,\n        };\n\n        this.storage.findAll(function (data) {\n            data.forEach(function (todo) {\n                if (todo.completed)\n                    todos.completed++;\n                else\n                    todos.active++;\n\n                todos.total++;\n            });\n            callback(todos);\n        });\n    };\n\n    // Export to window\n    window.app = window.app || {};\n    window.app.Model = Model;\n})(window);"
+    },
+    "rationale": "In Model.prototype.read, the condition checking whether the first argument is a callback function was inverted, preventing todo items from being read and rendered; I removed the negation so findAll is called when query is a function."
+  },
+  "repro_valid": null,
+  "fixed_in_repair": false,
+  "latency_s": 23.66,
+  "cost_usd": 0.074004,
+  "tokens": 15820,
+  "input_tokens": 13608,
+  "output_tokens": 2212,
+  "run_id": "r_20261121_150340_f8b6_baseline",
+  "stage_reached": null,
+  "failed_gate": null,
+  "reason": "In Model.prototype.read, the condition checking whether the first argument is a callback function was inverted, preventing todo items from being read and rendered; I removed the negation so findAll is called when query is a function.",
+  "internal_error": false,
+  "finished_at": "2026-11-21T20:04:04.021488+00:00"
+}

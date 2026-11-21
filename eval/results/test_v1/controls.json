@@ -1,0 +1,268 @@
+{
+  "ok": true,
+  "rows": [
+    {
+      "control": "m009 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m009 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 7 of sequence 10007"
+    },
+    {
+      "control": "m010 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m010 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 10 of sequence 10001"
+    },
+    {
+      "control": "m011 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m011 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m012 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m012 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m013 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m013 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 4 of sequence 10002"
+    },
+    {
+      "control": "m015 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m015 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 7 of sequence 10007"
+    },
+    {
+      "control": "m016 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m016 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m017 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m017 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 6 of sequence 10007"
+    },
+    {
+      "control": "m018 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m018 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 10 of sequence 10002"
+    },
+    {
+      "control": "m020 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m020 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m021 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m021 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 8 of sequence 10001"
+    },
+    {
+      "control": "m022 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m022 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 8 of sequence 10001"
+    },
+    {
+      "control": "m023 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m023 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 10 of sequence 10001"
+    },
+    {
+      "control": "m024 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m024 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 8 of sequence 10001"
+    },
+    {
+      "control": "m025 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m025 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m026 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m026 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 10 of sequence 10002"
+    },
+    {
+      "control": "m027 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m027 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 1 of sequence 10000"
+    },
+    {
+      "control": "m028 answer key restored",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "control": "m028 unpatched",
+      "expected": "WRONG_FIX",
+      "got": "WRONG_FIX",
+      "ok": true,
+      "detail": "step 7 of sequence 10007"
+    },
+    {
+      "control": "original app as candidate",
+      "expected": "TRUE_FIX",
+      "got": "TRUE_FIX",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "flaky": [],
+  "n_seq": 200,
+  "distinct_apps_scored": 25,
+  "verdicts_reused": 47
+}

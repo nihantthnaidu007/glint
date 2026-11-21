@@ -5,6 +5,9 @@ runs/
 live/
 eval/results/*
 !eval/results/summary.json
+# raw per-run eval records (JSON only) are tracked so the results can be audited
+!eval/results/test_v1/
+!eval/results/test_v2_derived/
 .DS_Store
 .pytest_cache/
 .ruff_cache/

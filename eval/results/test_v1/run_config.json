@@ -1,0 +1,36 @@
+{
+  "written_at": "2026-11-21T20:01:30.419389+00:00",
+  "split": "test",
+  "tag": "v1",
+  "corpus": "/Users/kalisettinihanthnaidu/Desktop/Glint/eval/corpus",
+  "systems": [
+    "glint",
+    "baseline"
+  ],
+  "rungs": [
+    "r0",
+    "r3"
+  ],
+  "include_clean": true,
+  "limit": null,
+  "n_cases": 22,
+  "models": {
+    "neon": "gemini-4-neon",
+    "hydrogen": "gemini-4-hydrogen",
+    "decision": "gemini-decision-1"
+  },
+  "baseline_model": "gemini-4-neon",
+  "thresholds": {
+    "TH_G0_IS_DEFECT": 0.1,
+    "TH_G1B_SYMPTOM_MATCH": 0.6,
+    "TH_G4_DEFECT_GONE": 0.68
+  },
+  "n_candidates": 4,
+  "run_budget_s": 150,
+  "oracle": {
+    "n_seq": 200,
+    "seed": 10000,
+    "replays": 2,
+    "parallel": 4
+  }
+}
