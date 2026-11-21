@@ -196,6 +196,37 @@ def score_predictions(text: str, glint: dict[str, Any], baseline: dict[str, Any]
         rungs = {row["rung"]: row["repro_valid_rate"] for row in extras.get("by_rung", [])}
         drop = _points(rungs.get("R0"), rungs.get("R3"))
         add(m, cmp(drop, lambda v: v >= float(m.group(1))), "n/a" if drop is None else f"{drop:.1f} points")
+    # The six predictions written at the freeze (eval/PREDICTIONS.md, Nov 21 2026).
+    rungs_tf = {row["rung"]: row["true_fix_rate"] for row in extras.get("by_rung", [])}
+    if m := re.search(rf"Glint precision when it claims a fix: at least {NUM}\s*%", text, flags):
+        p = glint["precision_when_claiming"]
+        add(m, cmp(p, lambda v: v * 100 >= float(m.group(1))), pct(p))
+    if m := re.search(rf"Glint true-fix rate on test bugs \(clean recordings\): at least {NUM}\s*%", text, flags):
+        r0 = rungs_tf.get("R0")
+        add(m, cmp(r0, lambda v: v * 100 >= float(m.group(1))), f"{pct(r0)} on R0")
+    if m := re.search(rf"Single Neon call true-fix rate: at least {NUM}\s*%", text, flags):
+        t = baseline["true_fix_rate"]
+        add(m, cmp(t, lambda v: v * 100 >= float(m.group(1))), f"{pct(t)} over all bug runs")
+    if m := re.search(rf"Single Neon call wrong-fix rate: at least {NUM}\s*%", text, flags):
+        w = baseline["wrong_fix_rate"]
+        add(m, cmp(w, lambda v: v * 100 >= float(m.group(1))), f"{pct(w)} over all bug runs")
+    if m := re.search(
+        rf"On clean videos: Glint claims a fix on at most {NUM}, the single call changes code on all of them",
+        text,
+        flags,
+    ):
+        n_clean = baseline["n_clean_runs"]
+        if n_clean and glint["n_clean_runs"]:
+            g, b = glint["clean_video_false_fixes"], baseline["clean_video_false_fixes"]
+            add(m, g <= float(m.group(1)) and b == n_clean, f"Glint {g} of {glint['n_clean_runs']}, single call {b} of {n_clean}")
+        else:
+            add(m, None, "n/a")
+    if m := re.search(
+        rf"Glint true-fix rate on phone videos is at least {NUM} points lower than on clean recordings", text, flags
+    ):
+        gap = _points(rungs_tf.get("R0"), rungs_tf.get("R3"))
+        actual = "n/a" if gap is None else f"R0 {pct(rungs_tf.get('R0'))}, R3 {pct(rungs_tf.get('R3'))}, gap {gap:.1f} points"
+        add(m, cmp(gap, lambda v: v >= float(m.group(1))), actual)
     return rows
 
 

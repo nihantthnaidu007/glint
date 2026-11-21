@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import shutil
@@ -50,7 +51,7 @@ SYSTEMS = ("glint", "baseline")
 RUNGS = ("r0", "r3")
 ORACLE_N_SEQ = 200
 ORACLE_SEED = 10_000
-ORACLE_PARALLEL = 2
+ORACLE_PARALLEL = 4
 ORACLE_ATTEMPTS = 2
 ORACLE_REPLAYS = 2  # extra replays of a diverging sequence; all must diverge at the same step
 SEQUENCE_LENGTH = 12  # eval.fuzz.differential default, part of its snapshot cache key
@@ -85,6 +86,8 @@ class OracleCtx:
     cache: dict[tuple[str, int, int], list[dict[str, Any]]] = field(default_factory=dict)
     slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(ORACLE_PARALLEL))
     flaky: list[dict[str, Any]] = field(default_factory=list)
+    verdicts: dict[str, asyncio.Task[dict[str, Any] | None]] = field(default_factory=dict)
+    cache_hits: int = 0
 
 
 # --- corpus discovery ---------------------------------------------------------------------------
@@ -131,6 +134,8 @@ def discover_cases(
     clean_root = app_root / "clean"
     if include_clean and clean_root.is_dir():
         for clean_dir in sorted(d for d in clean_root.iterdir() if d.is_dir()):
+            if (clean_dir / "meta.json").is_file() and read_split(clean_dir / "meta.json") is None:
+                continue  # excluded before the scored run, see eval/corpus/EXCLUSIONS.md
             for rung in rungs:
                 video = find_video(clean_dir, rung)
                 if video is not None:
@@ -178,7 +183,34 @@ async def reproducible_divergence(oracle: OracleCtx, candidate: Path, label: str
     return None
 
 
+def content_hash(app_dir: Path) -> str:
+    """SHA-256 over every file of an app directory: relative path and bytes, in sorted order."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in app_dir.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(app_dir).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 async def _oracle_verdict(oracle: OracleCtx, candidate: Path, label: str) -> dict[str, Any] | None:
+    """Oracle verdict for an app directory, scored once per distinct content.
+
+    Byte-identical candidates (for example an answer-key control and the original app, or the same fix
+    proposed by two systems) share one scoring. The first request starts it; later ones wait for it.
+    """
+    key = content_hash(candidate)
+    task = oracle.verdicts.get(key)
+    if task is None:
+        task = asyncio.ensure_future(_score_uncached(oracle, candidate, label))
+        oracle.verdicts[key] = task
+    else:
+        oracle.cache_hits += 1
+    return await task
+
+
+async def _score_uncached(oracle: OracleCtx, candidate: Path, label: str) -> dict[str, Any] | None:
     """reproducible_divergence under the oracle's concurrency limit, with one retry on a browser failure."""
     async with oracle.slots:
         for attempt in range(1, ORACLE_ATTEMPTS + 1):
@@ -486,7 +518,13 @@ async def phase_two(args: argparse.Namespace, cases: list[Case], corpus: Path, o
             data = json.loads(controls_path.read_text(encoding="utf-8"))
             data["flaky"] = oracle.flaky
             controls_path.write_text(json.dumps(data, indent=2), "utf-8")
-            print(f"phase 2 done: {len(oracle.flaky)} flaky sequence(s) seen and not counted")
+            data["distinct_apps_scored"] = len(oracle.verdicts)
+            data["verdicts_reused"] = oracle.cache_hits
+            controls_path.write_text(json.dumps(data, indent=2), "utf-8")
+            print(
+                f"phase 2 done: {len(oracle.verdicts)} distinct apps scored, {oracle.cache_hits} verdicts reused, "
+                f"{len(oracle.flaky)} flaky sequence(s) seen and not counted"
+            )
         finally:
             await browser.close()
     return 0

@@ -1,6 +1,7 @@
 """Tests for eval.run_eval and eval.baselines: discovery, hygiene, record shape, oracle scoring. No network."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import shutil
@@ -178,3 +179,41 @@ async def test_score_patch_with_the_real_oracle(tmp_path: Path) -> None:
 
 async def test_repro_is_valid_none_without_a_repro(tmp_path: Path) -> None:
     assert await run_eval.repro_is_valid(tmp_path, TODOMVC) is None
+
+
+def test_content_hash_tracks_file_bytes(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    shutil.copytree(TODOMVC, a)
+    shutil.copytree(TODOMVC, b)
+    assert run_eval.content_hash(a) == run_eval.content_hash(b) == run_eval.content_hash(TODOMVC)
+    (b / "model.js").write_text((b / "model.js").read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    assert run_eval.content_hash(a) != run_eval.content_hash(b)
+
+
+async def test_identical_apps_are_scored_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Path] = []
+
+    async def fake_reproducible(oracle: OracleCtx, candidate: Path, label: str = "") -> None:
+        calls.append(candidate)
+        await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(run_eval, "reproducible_divergence", fake_reproducible)
+    a, b, c = tmp_path / "a", tmp_path / "b", tmp_path / "c"
+    for d in (a, b, c):
+        shutil.copytree(TODOMVC, d)
+    (c / "model.js").write_text("changed", encoding="utf-8")
+    oracle = OracleCtx(browser=None, n_seq=1)
+    results = await asyncio.gather(*(run_eval._oracle_verdict(oracle, d, d.name) for d in (a, b, c, a)))
+    assert results == [None, None, None, None]
+    assert len(calls) == 2 and oracle.cache_hits == 2
+
+
+def test_excluded_clean_video_is_skipped(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    for name in ("c01", "c02"):
+        d = corpus / "todomvc" / "clean" / name
+        d.mkdir(parents=True)
+        (d / "video_r0.webm").write_bytes(b"x")
+    (corpus / "todomvc" / "clean" / "c01" / "meta.json").write_text('{"split": null}', encoding="utf-8")
+    cases = run_eval.discover_cases(corpus, "test", ["r0"], include_clean=True)
+    assert [c.case_id for c in cases] == ["c02"]
