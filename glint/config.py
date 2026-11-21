@@ -42,14 +42,14 @@ PATCH_ALLOWED_EXT = {".js", ".html"}
 MONKEY_ACTIONS = 30               # G3 random actions on the patched app
 
 # Gate thresholds (tuned on dev split only, then frozen at 14:35)
-TH_G0_IS_DEFECT = 0.30            # abstain if p_yes < this
+TH_G0_IS_DEFECT = 0.10            # abstain if p_yes < this (advisory in practice, see CONTRACTS section 10)
 TH_G1B_SYMPTOM_MATCH = 0.60       # pass if p_yes >= this
-TH_G4_DEFECT_GONE = 0.70          # pass if p_yes >= this
+TH_G4_DEFECT_GONE = 0.68          # pass if p_yes >= this
 
 # Decision questions (wording frozen with thresholds)
 Q_G0 = "Does this screen recording show a software application behaving incorrectly or not as a user would expect?"
 Q_G1B = "The first input is a screen recording of a bug. The second input is a screenshot from an automated test. Does the screenshot show the same incorrect behavior as the recording?"
-Q_G4 = "The first input is a screen recording of a bug. The second input is a screenshot of the same app after a fix, taken after the same user steps. Is the incorrect behavior from the recording absent in the screenshot, with the app otherwise working normally?"
+Q_G4 = "The first image shows the bug. Does the second image show the expected behavior with the bug gone?"
 
 # Cost estimates (USD per 1M tokens; Decision price unknown, set 0 and say so)
 PRICE = {

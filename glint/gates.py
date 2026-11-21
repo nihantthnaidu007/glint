@@ -11,7 +11,6 @@ from playwright.async_api import Page, async_playwright
 
 from glint import config, gemini, workspace
 from glint.gemini import VideoRef
-from glint.perceive import symptom_block
 from glint.repro import FAILED_ASSERTION, PASSED, VIEWPORT, run_test
 from glint.schemas import Candidate, GateResult, ReproSpec
 
@@ -25,13 +24,15 @@ MAX_ERRORS_REPORTED = 3
 DETAIL_CHARS = 300
 
 def outcome_block(spec: ReproSpec) -> dict:
-    """Decision API text block for G4: the reported symptom plus the expected correct behavior.
+    """Decision API text block for G4: the observed (buggy) behavior and the expected correct behavior."""
+    return {
+        "type": "text",
+        "text": (
+            f"Observed incorrect behavior (the bug): {spec.observed}\n"
+            f"Expected correct behavior after the same steps: {spec.expected}"
+        ),
+    }
 
-    With the symptom alone, any screen that does not show the bug scores high (an unrelated screenshot
-    scored 0.89). Adding the expected behavior separates them: fixed 0.91, still buggy 0.19, unrelated 0.17.
-    """
-    symptom = symptom_block(spec)["text"]
-    return {"type": "text", "text": f"{symptom}\nExpected correct behavior after the same steps: {spec.expected}"}
 
 # Visible, enabled, same-page interactive elements. Links that leave the app are skipped.
 INTERACTIVE_JS = """
@@ -150,21 +151,19 @@ async def _g3(candidate: Candidate, base_url: str) -> GateResult:
     )
 
 
-async def _g4(candidate: Candidate, video_ref: VideoRef, spec: ReproSpec, shot: Path) -> GateResult:
+async def _g4(candidate: Candidate, spec: ReproSpec, before_shot: Path, after_shot: Path) -> GateResult:
+    """Decision 1 compares the failing-repro screenshot (before) with the candidate's screenshot (after)."""
     answers = await gemini.decide(
-        [
-            gemini.video_block(video_ref, config.DECISION_VIDEO_RESOLUTION),
-            gemini.image_block(shot),
-            outcome_block(spec),
-        ],
+        [gemini.image_block(before_shot), gemini.image_block(after_shot), outcome_block(spec)],
         {"g4": config.Q_G4},
     )
     p_yes = answers["g4"]
     passed = p_yes >= config.TH_G4_DEFECT_GONE
     detail = (
-        f"Defect judged gone in the after screenshot (p={p_yes:.2f})."
+        f"Expected behavior judged present in the after screenshot (p={p_yes:.2f})."
         if passed
-        else f"Defect not clearly gone in the after screenshot (p={p_yes:.2f}, need {config.TH_G4_DEFECT_GONE:.2f})."
+        else f"Expected behavior not clearly shown in the after screenshot (p={p_yes:.2f}, "
+        f"need {config.TH_G4_DEFECT_GONE:.2f})."
     )
     return GateResult(gate="G4", passed=passed, p_yes=p_yes, detail=detail, candidate_id=candidate.id)
 
@@ -202,7 +201,13 @@ async def _run_gates(
         c.gates.append(g3)
         if not g3.passed:
             return
-    c.gates.append(await _g4(c, video_ref, spec, after_shot))
+    before_shot = shots_dir / "repro_fail.png"
+    if not before_shot.is_file():
+        c.gates.append(
+            GateResult(gate="G4", passed=False, detail="The failing-repro screenshot is missing.", candidate_id=c.id)
+        )
+        return
+    c.gates.append(await _g4(c, spec, before_shot, after_shot))
 
 
 async def check_candidate(

@@ -150,14 +150,14 @@ PATCH_ALLOWED_EXT = {".js", ".html"}
 MONKEY_ACTIONS = 30               # G3 random actions on the patched app
 
 # Gate thresholds (tuned on dev split only, then frozen at 14:35)
-TH_G0_IS_DEFECT = 0.30            # abstain if p_yes < this
+TH_G0_IS_DEFECT = 0.10            # abstain if p_yes < this (advisory in practice, see CONTRACTS section 10)
 TH_G1B_SYMPTOM_MATCH = 0.60       # pass if p_yes >= this
-TH_G4_DEFECT_GONE = 0.70          # pass if p_yes >= this
+TH_G4_DEFECT_GONE = 0.68          # pass if p_yes >= this
 
 # Decision questions (wording frozen with thresholds)
 Q_G0 = "Does this screen recording show a software application behaving incorrectly or not as a user would expect?"
 Q_G1B = "The first input is a screen recording of a bug. The second input is a screenshot from an automated test. Does the screenshot show the same incorrect behavior as the recording?"
-Q_G4 = "The first input is a screen recording of a bug. The second input is a screenshot of the same app after a fix, taken after the same user steps. Is the incorrect behavior from the recording absent in the screenshot, with the app otherwise working normally?"
+Q_G4 = "The first image shows the bug. Does the second image show the expected behavior with the bug gone?"
 
 # Cost estimates (USD per 1M tokens; Decision price unknown, set 0 and say so)
 PRICE = {
@@ -470,7 +470,8 @@ repro:      hydrogen -> repro_test.py; run; need failed_assertion REPRO_FAIL_RUN
             repro_test.py is now FROZEN (hash recorded)
 candidates: N_CANDIDATES hydrogen calls in parallel (varied temperature), each a Patch
             per candidate, own workspace: apply_patch (G-rules) -> G2 -> G3 -> G4, stop at first failure
-repair:     only if allow_repair and zero survivors: one neon call with sanitized feedback
+repair:     only if allow_repair, zero survivors, AND at least one candidate failed G2 or G3 (skipped when every
+            candidate failed only at G4): one neon call with sanitized feedback
             (gate name + assertion message only), up to 2 candidates r1, r2, same gates
 select:     survivors sorted by (lines_changed asc, G4 p_yes desc) -> winner
             no survivors -> NO_VERIFIED_FIX, repro_test.py still returned
@@ -485,19 +486,18 @@ errors:     any exception -> caught, internal_error=True, status by stage (befor
 | G1B | Decision: failure screenshot matches the video symptom (inputs: video, screenshot, symptom text) | p_yes ≥ TH_G1B_SYMPTOM_MATCH |
 | G2 | Repro passes on the patched app | passed 2 of 2 runs |
 | G3 | Never worse | page loads, zero page errors and console errors during load and MONKEY_ACTIONS random actions, patch within file and line limits |
-| G4 | Decision: defect gone in the after screenshot (inputs: video, screenshot, symptom text) | p_yes ≥ TH_G4_DEFECT_GONE |
+| G4 | Decision: the after screenshot shows the expected behavior (inputs: before screenshot, after screenshot, observed and expected text; no video) | p_yes ≥ TH_G4_DEFECT_GONE |
 
 **Decision gate inputs (contract change "decision gates", 12:45):**
 - Every Decision gate passes the video with `video_block(ref, config.DECISION_VIDEO_RESOLUTION)` (`"high"`). `video_block` itself still defaults to `"low"`.
 - G1B passes three input blocks in this order: the video, the screenshot (`image_block`), and a text block with the spec's observed behavior, built by `perceive.symptom_block(spec)`: `{"type": "text", "text": "Reported incorrect behavior in the recording: <spec.observed>"}`. The question wording (`Q_G1B`, `Q_G4`) is unchanged.
 - Reason, measured on one recording: without the text block a screenshot of the buggy state scored 0.54 and a screenshot of the correct state 0.50. With it: 0.78 against 0.20. G0 scored 0.25 at `"low"` and 0.52 at `"high"`.
 
-- G4 passes the same three blocks, but its text block carries the spec's observed AND expected behavior, built by `gates.outcome_block(spec)`: the symptom line above plus `Expected correct behavior after the same steps: <spec.expected>`. Measured on one recording with the symptom alone: fixed app 0.88, unrelated screenshots 0.81 to 0.89. With observed and expected: fixed 0.91, still buggy 0.19, unrelated 0.17 and 0.46.
+- G4 (contract change "tune gates on dev", 14:00) does not use the video. It passes three blocks in this order: the failing-repro screenshot `shots/repro_fail.png` (before), the candidate's `shots/<cid>_after.png` (after), and a text block built by `gates.outcome_block(spec)`: `Observed incorrect behavior (the bug): <spec.observed>` and `Expected correct behavior after the same steps: <spec.expected>`. `Q_G4` is "The first image shows the bug. Does the second image show the expected behavior with the bug gone?". Measured on 17 labeled dev screenshots (6 answer-key fixes, 11 still-buggy or wrong-fix states): the previous G4 could not reach zero false passes without rejecting all 6 correct fixes; this variant at 0.68 accepts 5 of 6 correct fixes and no wrong state (highest wrong state 0.62, lowest accepted fix 0.73).
 
-**One-retry rule for G0 and perceive (contract change "perceive retry", 13:25):** a single slow or failed model call must not end the run.
-- G0: the `decide` call runs under `TIMEOUT_S["g0"]` (15 s). If it times out or raises, the pipeline emits a `log` event and calls it once more under the same 15 s limit.
-- Perceive: the first Neon call runs at `NEON_THINKING` under `TIMEOUT_S["perceive"]` (30 s). If it times out or raises, the pipeline emits a `log` event and retries once at `PERCEIVE_RETRY_THINKING` (`"low"`) under `TIMEOUT_S["perceive_retry"]` (30 s). `perceive.perceive(video_ref, app_dir, duration_s=None, thinking=NEON_THINKING)` takes the thinking level.
-- Only if the retry also fails does the run end: a second timeout gives ABSTAIN with reason "Stopped at <stage>: this step ran out of time."; a second exception gives ABSTAIN with `internal_error` true.
+**G0 is advisory in practice (contract change "tune gates on dev", 14:00).** On 7 dev bug videos, 2 clean videos and the black garbage video, no question wording or resolution separated bugs from non-bugs: at high resolution bugs scored 0.22 to 0.87, clean videos 0.41 and 0.84, black 0.44. `TH_G0_IS_DEFECT` is therefore 0.10, below every bug video seen, so G0 is recorded and shown but stops almost nothing. The runs that must not produce a fix are stopped later: with G0 bypassed, both clean videos and the black video ended in ABSTAIN at the repro stage (G1 or G1B).
+
+**Repair round condition (same contract change):** the repair round runs only when no candidate survived AND at least one candidate failed G2 or G3. When every candidate passed G2 and G3 and was rejected only by G4, new patches would be the same fix, so the round is skipped.
 
 **Patch transport (contract change, 13:10):** the Gemini Developer API rejects map-typed fields in a response schema, so models never return `Patch` directly. They return `patch.PatchWire` (`files: list[{path, content}]`, `rationale`), and the repair round returns `patch.RepairWire` (`patches: list[PatchWire]`). `patch.to_patch()` converts each to the shared `Patch` (path -> full content). `Patch` itself is unchanged.
 

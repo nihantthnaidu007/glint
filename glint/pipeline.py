@@ -282,6 +282,10 @@ async def _stage_candidates(
     await _check_all(run, initial, app_dir, test_path, video_ref, spec)
     if not allow_repair or any(c.survived for c in run.candidates):
         return
+    # A repair round can only help when some candidate failed a check that a different patch could pass.
+    # When every candidate already passed G2 and G3 and was stopped only by G4, new patches would be the same.
+    if not any(not g.passed and g.gate in ("G2", "G3") for c in initial for g in c.gates):
+        return
 
     run.stage = "repair"
     failed_gates = sorted({g.gate for c in initial for g in c.gates if not g.passed})
