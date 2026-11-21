@@ -222,7 +222,7 @@ async def _attempt(
     attempt_dir = work_dir / f"attempt_{attempt}"
     attempt_dir.mkdir(parents=True, exist_ok=True)
     test_path = attempt_dir / "repro_test.py"
-    test_path.write_text(code, encoding="utf-8")
+    test_path.write_text(code, encoding="utf-8", newline="\n")
 
     outcome, detail, shot = FAILED_OTHER, "", None
     async with workspace.serve(app_dir) as base_url:

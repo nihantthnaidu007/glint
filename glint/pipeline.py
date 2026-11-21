@@ -229,8 +229,10 @@ async def _stage_repro(run: _Run, video_ref: VideoRef, spec: ReproSpec, app_dir:
         why = next((g.detail for g in repro_gates if not g.passed), "no test failed on the app")
         why = " ".join(why.split())[:160].rstrip(".")
         raise _Stop("ABSTAIN", f"Glint could not reproduce the bug with an automated test ({why}).")
+    # Hash the bytes on disk, the same way the check before select does. Hashing the decoded text instead
+    # breaks on Windows, where the file is written with CRLF line endings but read back as LF.
+    run.repro_hash = hashlib.sha256(test_path.read_bytes()).hexdigest()
     code = test_path.read_text(encoding="utf-8")
-    run.repro_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
     (run.bundle / "repro_test.sha256").write_text(run.repro_hash + "\n", encoding="utf-8")
     run.repro_test = REPRO_NAME
     await run.emit("repro.ready", {"test_code": code, "screenshot": REPRO_SHOT})

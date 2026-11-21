@@ -191,3 +191,28 @@ async def test_g0_error_is_retried(runs_dir: Path, tmp_path: Path, monkeypatch: 
     assert result.gates[0].gate == "G0" and result.gates[0].passed
     events = read_events(runs_dir / "r_test_g0retry")
     assert any(e.type == "log" and e.stage == "g0" for e in events)
+
+
+async def test_crlf_repro_test_does_not_break_the_freeze_check(
+    runs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On Windows the repro test is written with CRLF line endings. The freeze hash must still match."""
+    stub_later_stages(monkeypatch)
+
+    async def crlf_repro(video_ref, spec, app_dir, bundle_dir, emit=None):
+        (bundle_dir / "repro_test.py").write_bytes(b"def test_repro(page):\r\n    pass\r\n")
+        return bundle_dir / "repro_test.py", [GateResult(gate="G1", passed=True), GateResult(gate="G1B", passed=True)]
+
+    async def fake_g0(video_ref):
+        return GateResult(gate="G0", passed=True, p_yes=0.9)
+
+    async def fake_perceive(*args: object, **kwargs: object) -> ReproSpec:
+        return SPEC
+
+    monkeypatch.setattr(repro, "establish_repro", crlf_repro)
+    monkeypatch.setattr(perceive, "is_defect", fake_g0)
+    monkeypatch.setattr(perceive, "perceive", fake_perceive)
+    result = await pipeline.run_pipeline(make_video(tmp_path / "v.mp4"), APP, "todomvc", "r_test_crlf")
+    assert result.internal_error is False
+    assert result.status == "NO_VERIFIED_FIX" and result.stage_reached == "select"
+    assert "changed after it was frozen" not in result.reason
