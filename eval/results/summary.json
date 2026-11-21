@@ -1,0 +1,40 @@
+{
+  "available": true,
+  "frozen_hash": "7aae1b6c0d01ab94a538aa6a03653ebe86aa2ec2",
+  "n_test_mutants": 18,
+  "rows": [
+    {
+      "system": "Glint",
+      "true_fix_rate": 0.6667,
+      "precision_when_claiming": 1.0,
+      "wrong_fix_rate": 0.0,
+      "abstain_rate": 0.3333,
+      "clean_video_false_fixes": 0,
+      "median_latency_s": 56.9,
+      "mean_cost_usd": 0.2358
+    },
+    {
+      "system": "Single Neon call",
+      "true_fix_rate": 0.9524,
+      "precision_when_claiming": 0.9524,
+      "wrong_fix_rate": 0.0476,
+      "abstain_rate": 0.0,
+      "clean_video_false_fixes": 0,
+      "median_latency_s": 27.73,
+      "mean_cost_usd": 0.0907
+    }
+  ],
+  "by_rung": [
+    {
+      "rung": "R0",
+      "repro_valid_rate": 0.9444,
+      "true_fix_rate": 0.6667
+    },
+    {
+      "rung": "R3",
+      "repro_valid_rate": 1.0,
+      "true_fix_rate": 0.6667
+    }
+  ],
+  "repair_share_of_fixes": 0.0
+}
