@@ -3,20 +3,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import functools
 import logging
 import random
-import socket
-import subprocess
-import sys
-import time
-import urllib.error
-import urllib.request
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from playwright.async_api import Browser, Page, async_playwright
+
+from glint.workspace import _QuietHandler, _WorkspaceServer
 
 logger = logging.getLogger(__name__)
 
@@ -42,44 +40,25 @@ _WORDS = [
 ]
 
 
-def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
 @contextmanager
 def _serve_dir(app_dir: Path) -> Iterator[str]:
-    """Serve app_dir on a free localhost port using python -m http.server."""
-    port = _find_free_port()
-    url = f"http://127.0.0.1:{port}"
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1", "--directory", str(app_dir)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    """Serve app_dir from a thread in this process on a free localhost port, yielding its base URL.
+
+    Binds 127.0.0.1 port 0 (the OS picks the port atomically) with a listen backlog of 128, so
+    several browser contexts loading at once never get a reset connection and a half-loaded page.
+    """
+    handler = functools.partial(_QuietHandler, directory=str(app_dir))
+    server = _WorkspaceServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, name="glint-fuzz-server", daemon=True
     )
+    thread.start()
     try:
-        deadline = time.monotonic() + 5.0
-        while time.monotonic() < deadline:
-            if proc.poll() is not None:
-                raise RuntimeError(f"http.server exited early with {proc.returncode}")
-            try:
-                with urllib.request.urlopen(url, timeout=0.5) as resp:
-                    if resp.status == 200:
-                        break
-            except (urllib.error.URLError, OSError):
-                time.sleep(0.05)
-        else:
-            raise TimeoutError(f"http.server did not respond 200 at {url}")
-        yield url
+        yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2.0)
 
 
 def generate_sequence(seed: int, length: int = 12) -> list[dict[str, Any]]:
@@ -203,6 +182,38 @@ async def _pick_and_perform_step(page: Page, seed: int, step_idx: int) -> dict[s
     return {"kind": "click", "domIdx": chosen["domIdx"], "step": step_idx}
 
 
+async def _wait_dom_stable(page: Page, settle_ms: int = 30, timeout_ms: int = 500) -> None:
+    """Wait until no DOM mutations occur for settle_ms and two animation frames pass."""
+    await page.evaluate(
+        """({ settleMs, timeoutMs }) => new Promise((resolve) => {
+            let timer = null;
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                observer.disconnect();
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            };
+            const reset = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(finish, settleMs);
+            };
+            const observer = new MutationObserver(reset);
+            if (document.body) {
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    characterData: true,
+                });
+            }
+            reset();
+            setTimeout(finish, timeoutMs);
+        })""",
+        {"settleMs": settle_ms, "timeoutMs": timeout_ms},
+    )
+
+
 async def _run_sequence_with_browser(
     browser: Browser,
     url: str,
@@ -221,16 +232,16 @@ async def _run_sequence_with_browser(
     page_errors: list[str] = []
     page.on("pageerror", lambda err: page_errors.append(str(err)))
     try:
-        await page.goto(url, wait_until="domcontentloaded")
+        await page.goto(url, wait_until="load")
         await page.add_style_tag(content=_DISABLE_ANIMATIONS_CSS)
-        await page.wait_for_timeout(50)
+        await _wait_dom_stable(page)
 
         snaps = [await snapshot(page)]
         actions: list[dict[str, Any]] = []
         for step_idx in range(length):
             action = await _pick_and_perform_step(page, seed, step_idx)
             actions.append(action)
-            await page.wait_for_timeout(20)
+            await _wait_dom_stable(page)
             snaps.append(await snapshot(page))
         return snaps, actions, page_errors
     finally:
