@@ -99,7 +99,7 @@ Frontend: plain HTML, CSS, JS. No framework, no build step. Any library goes int
 |---|---|
 | 8000 | Glint server (API + web UI) |
 | 8100 | Live demo bug app (scripts/make_live_bug.py) |
-| 8200 to 8999 | Workspaces served during gates, chosen by `workspace.serve()` as free ports |
+| any free port | Workspaces served during gates. `workspace.serve()` binds `127.0.0.1` port 0 in-process, so the OS picks the port |
 
 ---
 
@@ -119,6 +119,7 @@ DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0
 
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"
+REPAIR_THINKING = "low"           # Neon in the repair round: "medium" took 54 s, over TIMEOUT_S["repair"]
 
 # Concurrency and budgets
 MAX_CONCURRENCY = int(os.getenv("GLINT_MAX_CONCURRENCY", "4"))
@@ -486,8 +487,16 @@ errors:     any exception -> caught, internal_error=True, status by stage (befor
 
 **Decision gate inputs (contract change "decision gates", 12:45):**
 - Every Decision gate passes the video with `video_block(ref, config.DECISION_VIDEO_RESOLUTION)` (`"high"`). `video_block` itself still defaults to `"low"`.
-- G1B and G4 pass three input blocks in this order: the video, the screenshot (`image_block`), and a text block with the spec's observed behavior, built by `perceive.symptom_block(spec)`: `{"type": "text", "text": "Reported incorrect behavior in the recording: <spec.observed>"}`. The question wording (`Q_G1B`, `Q_G4`) is unchanged.
+- G1B passes three input blocks in this order: the video, the screenshot (`image_block`), and a text block with the spec's observed behavior, built by `perceive.symptom_block(spec)`: `{"type": "text", "text": "Reported incorrect behavior in the recording: <spec.observed>"}`. The question wording (`Q_G1B`, `Q_G4`) is unchanged.
 - Reason, measured on one recording: without the text block a screenshot of the buggy state scored 0.54 and a screenshot of the correct state 0.50. With it: 0.78 against 0.20. G0 scored 0.25 at `"low"` and 0.52 at `"high"`.
+
+- G4 passes the same three blocks, but its text block carries the spec's observed AND expected behavior, built by `gates.outcome_block(spec)`: the symptom line above plus `Expected correct behavior after the same steps: <spec.expected>`. Measured on one recording with the symptom alone: fixed app 0.88, unrelated screenshots 0.81 to 0.89. With observed and expected: fixed 0.91, still buggy 0.19, unrelated 0.17 and 0.46.
+
+**Patch transport (contract change, 13:10):** the Gemini Developer API rejects map-typed fields in a response schema, so models never return `Patch` directly. They return `patch.PatchWire` (`files: list[{path, content}]`, `rationale`), and the repair round returns `patch.RepairWire` (`patches: list[PatchWire]`). `patch.to_patch()` converts each to the shared `Patch` (path -> full content). `Patch` itself is unchanged.
+
+**Candidate gates signature:** `gates.check_candidate(c, app_dir, repro_test, video_ref, bundle_dir, spec)` takes the `ReproSpec` as a sixth argument, because G4 needs its text. It never raises.
+
+**Repair thinking:** the repair round calls Neon with `config.REPAIR_THINKING` (`"low"`). At `"medium"` the call took 54 s, over `TIMEOUT_S["repair"]`; at `"low"` 25 s.
 
 **Stage progress callback:** `repro.establish_repro(video_ref, spec, app_dir, bundle_dir, emit)` takes `emit: Callable[[str, dict], Awaitable[None]] | None`, called as `await emit(event_type, data)` with the type and `data` payload from section 9. `pipeline.py` wraps it into `Event` objects, because only the pipeline owns `run_id` and `seq`. `perceive.perceive(video_ref, app_dir, duration_s=None)` clamps evidence timestamps when `duration_s` is given.
 

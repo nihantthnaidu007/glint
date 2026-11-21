@@ -11,6 +11,7 @@ DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0
 
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"
+REPAIR_THINKING = "low"           # Neon in the repair round: "medium" took 54 s, over TIMEOUT_S["repair"]
 
 # Concurrency and budgets
 MAX_CONCURRENCY = int(os.getenv("GLINT_MAX_CONCURRENCY", "4"))

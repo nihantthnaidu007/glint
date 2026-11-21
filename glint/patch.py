@@ -16,9 +16,6 @@ log = logging.getLogger("glint.patch")
 TEMPERATURE_RANGE = (0.2, 0.9)
 MAX_REPAIR_CANDIDATES = 2
 FEEDBACK_CHARS = 300
-# Neon at its default "medium" thinking took 54 s for two full-file patches, over TIMEOUT_S["repair"] (40 s).
-# At "low" it answered in 25 s.
-REPAIR_THINKING = "low"
 
 
 # The Gemini Developer API rejects map-typed fields in a response schema, so models answer with a list of
@@ -142,7 +139,7 @@ async def repair(spec: ReproSpec, app_dir: Path, failures: list[Candidate]) -> l
     parts: list = [*app_source_parts(app_dir), prompt]
     try:
         async with asyncio.timeout(config.TIMEOUT_S["repair"]):
-            wire = await gemini.neon(parts, schema=RepairWire, thinking=REPAIR_THINKING)
+            wire = await gemini.neon(parts, schema=RepairWire, thinking=config.REPAIR_THINKING)
     except TimeoutError:
         log.warning("repair round timed out")
         return []
