@@ -1249,3 +1249,20 @@ body {
     animation: none !important;
   }
 }
+
+/* "Likely fix": chosen because independent fixes agree, visual check inconclusive. Amber, never green. */
+.verdict-banner.is-likely {
+  background: var(--accent-wash);
+  border-bottom: 1px solid var(--accent-border);
+}
+
+.verdict-banner.is-likely .verdict-icon,
+.verdict-banner.is-likely .verdict-word {
+  color: var(--accent-text);
+}
+
+.verdict-note {
+  margin: 4px 0 0;
+  color: var(--accent-text);
+  font-weight: 500;
+}

@@ -68,6 +68,8 @@
     verdictIcon: document.getElementById("verdict-icon"),
     verdictWord: document.getElementById("verdict-word"),
     verdictReason: document.getElementById("verdict-reason"),
+    verdictNote: document.getElementById("verdict-note"),
+    diffHeading: document.getElementById("diff-heading"),
     verdictMeta: document.getElementById("verdict-meta"),
     replayBtn: document.getElementById("replay-btn"),
     verdictShimmer: document.getElementById("verdict-shimmer"),
@@ -817,7 +819,21 @@
     }
   }
 
+  // A VERIFIED_FIX is green "Verified" only when the visual check (G4) confirmed it. Under the v2 consensus rule a
+  // fix can also be chosen because independent fixes agree while the visual check was inconclusive: "Likely fix".
+  // Runs from before the rule carry neither phrase; then the winner's own G4 result decides.
+  function isVisuallyConfirmed(s) {
+    const reason = String((s.verdict && s.verdict.reason) || "").toLowerCase();
+    if (reason.includes("visual check inconclusive")) return false;
+    if (reason.includes("visual check passed")) return true;
+    const winner = s.winnerId ? s.candidateMap[s.winnerId] : null;
+    return Boolean(winner && winner.gates.G4 && winner.gates.G4.passed);
+  }
+
   function verdictPresentation(status, s) {
+    if (status === "VERIFIED_FIX" && s && !isVisuallyConfirmed(s)) {
+      return { word: "Likely fix", cls: "is-likely", icon: "≈", note: "Fixes agree, not visually confirmed" };
+    }
     // G0 is advisory, so an ABSTAIN after the video was understood means "could not reproduce", not "not a bug".
     if (status === "ABSTAIN" && s && (s.spec || s.reproAttempts.length)) {
       return { word: "No fix", cls: "is-neutral", icon: "—" };
@@ -861,6 +877,9 @@
     dom.verdictBanner.className = `verdict-banner ${pres.cls}`;
     dom.verdictIcon.textContent = pres.icon;
     dom.verdictWord.textContent = pres.word;
+    dom.verdictNote.hidden = !pres.note;
+    if (dom.diffHeading) dom.diffHeading.textContent = pres.cls === "is-likely" ? "Proposed patch" : "Verified patch";
+    dom.verdictNote.textContent = pres.note || "";
     dom.verdictReason.textContent = calmReason(s.verdict.reason);
     if (s.verdict.reason && dom.verdictReason.textContent !== s.verdict.reason) {
       dom.verdictReason.title = s.verdict.reason;
@@ -1463,7 +1482,7 @@
       dom.resultsTbody.appendChild(tr);
     }
     const nMut = typeof data.n_test_mutants === "number" ? data.n_test_mutants : 0;
-    const hash = data.frozen_hash || "—";
+    const hash = data.frozen_hash ? String(data.frozen_hash).slice(0, 7) : "—";
     dom.resultsFootnote.textContent = `${nMut} bugs frozen before any scored run · commit ${hash}`;
     dom.resultsStrip.hidden = false;
   }
