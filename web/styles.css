@@ -96,6 +96,8 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 24px;
+  /* Keep card tops (e.g. the verdict word) clear of the sticky stage rail when scrolled to. */
+  scroll-margin-top: 96px;
 }
 
 .card-header {
@@ -1086,7 +1088,7 @@ body {
 .compare-after-wrap {
   position: absolute;
   inset: 0;
-  clip-path: inset(0 0 0 50%);
+  clip-path: inset(0 0 0 30%);
 }
 
 .compare-tag {
@@ -1113,7 +1115,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 50%;
+  left: 30%;
   width: 2px;
   background: var(--accent);
   transform: translateX(-50%);
