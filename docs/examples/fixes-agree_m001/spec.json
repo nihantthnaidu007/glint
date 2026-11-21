@@ -1,0 +1,23 @@
+{
+  "summary": "Finishing an edit on a todo item fails to save or exit edit mode, leaving the edit input open after losing focus.",
+  "steps": [
+    "Click the input with placeholder \"What needs to be done?\" and type \"buy milk\".",
+    "Press Enter to add the \"buy milk\" todo item.",
+    "Double-click the \"buy milk\" todo item label to open edit mode.",
+    "Press Enter to finish editing the todo item."
+  ],
+  "expected": "The edit input box should close and the \"buy milk\" todo item should return to normal view mode displaying its unchecked checkbox and the \"buy milk\" label, with \"1 item left\" shown in the footer.",
+  "observed": "The edit input box for \"buy milk\" loses focus (the focus ring disappears), but remains open on screen and never exits edit mode or returns the item to normal view mode.",
+  "evidence_timestamps_s": [
+    14.0,
+    15.0
+  ],
+  "evidence_notes": [
+    "The edit input for \"buy milk\" has lost focus after finishing the edit, but the input box remains open instead of closing.",
+    "The \"buy milk\" todo item is still stuck in edit mode displaying the unfocused text input rather than its normal checkbox and label."
+  ],
+  "suspect_files": [
+    "controller.js"
+  ],
+  "confidence": 0.98
+}

@@ -1,0 +1,5 @@
+{"ts": "2026-11-21T20:41:21.677834+00:00", "model": "gemini-decision-1", "input_tokens": 2810, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 0.88}
+{"ts": "2026-11-21T20:42:16.965555+00:00", "model": "gemini-4-neon", "input_tokens": 14219, "output_tokens": 3060, "cost_usd": 0.088557, "latency_s": 25.281}
+{"ts": "2026-11-21T20:42:22.640593+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13510, "output_tokens": 1110, "cost_usd": 0.02859, "latency_s": 5.18}
+{"ts": "2026-11-21T20:42:29.961897+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13562, "output_tokens": 1191, "cost_usd": 0.029275, "latency_s": 6.335}
+{"ts": "2026-11-21T20:42:47.770687+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13562, "output_tokens": 1031, "cost_usd": 0.028075, "latency_s": 16.827}

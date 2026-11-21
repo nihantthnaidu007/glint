@@ -1,0 +1,29 @@
+{
+  "summary": "Editing and saving a todo item duplicates it in the list and increments the remaining item count.",
+  "steps": [
+    "Type \"clean desk\" into the \"What needs to be done?\" input and press Enter.",
+    "Click the checkbox next to \"clean desk\" to mark it as completed.",
+    "Type \"fix bug\" into the \"What needs to be done?\" input and press Enter.",
+    "Double-click on \"fix bug\" to enter edit mode.",
+    "Press Enter to save the edit to \"fix bug\"."
+  ],
+  "expected": "The list should contain two items: \"clean desk\" (completed) and a single \"fix bug\" (active), and the footer should display \"1 item left\".",
+  "observed": "The list contains three items: \"clean desk\" (completed) and two separate \"fix bug\" items (both active), and the footer displays \"2 items left\".",
+  "evidence_timestamps_s": [
+    4.0,
+    5.0,
+    7.0
+  ],
+  "evidence_notes": [
+    "\"fix bug\" is in edit mode with \"1 item left\" shown in the footer.",
+    "After finishing the edit, two \"fix bug\" items appear in the list and the footer shows \"2 items left\".",
+    "After adding \"buy milk\", both duplicate \"fix bug\" items remain in the list and the footer shows \"3 items left\"."
+  ],
+  "suspect_files": [
+    "controller.js",
+    "store.js",
+    "model.js",
+    "view.js"
+  ],
+  "confidence": 0.9
+}

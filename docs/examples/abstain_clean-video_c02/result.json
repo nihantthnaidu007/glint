@@ -1,0 +1,72 @@
+{
+  "run_id": "r_20261121_154116_4606_c02_v2live",
+  "app_id": "todomvc",
+  "status": "ABSTAIN",
+  "reason": "Glint could not reproduce the bug with an automated test (The test passed on the buggy app, so it does not reproduce the bug).",
+  "stage_reached": "repro",
+  "video": {
+    "path": "video.mp4",
+    "duration_s": 10.16,
+    "width": 1280,
+    "height": 720,
+    "has_audio": false,
+    "trimmed": false
+  },
+  "spec": {
+    "summary": "Editing and saving a todo item duplicates it in the list and increments the remaining item count.",
+    "steps": [
+      "Type \"clean desk\" into the \"What needs to be done?\" input and press Enter.",
+      "Click the checkbox next to \"clean desk\" to mark it as completed.",
+      "Type \"fix bug\" into the \"What needs to be done?\" input and press Enter.",
+      "Double-click on \"fix bug\" to enter edit mode.",
+      "Press Enter to save the edit to \"fix bug\"."
+    ],
+    "expected": "The list should contain two items: \"clean desk\" (completed) and a single \"fix bug\" (active), and the footer should display \"1 item left\".",
+    "observed": "The list contains three items: \"clean desk\" (completed) and two separate \"fix bug\" items (both active), and the footer displays \"2 items left\".",
+    "evidence_timestamps_s": [
+      4.0,
+      5.0,
+      7.0
+    ],
+    "evidence_notes": [
+      "\"fix bug\" is in edit mode with \"1 item left\" shown in the footer.",
+      "After finishing the edit, two \"fix bug\" items appear in the list and the footer shows \"2 items left\".",
+      "After adding \"buy milk\", both duplicate \"fix bug\" items remain in the list and the footer shows \"3 items left\"."
+    ],
+    "suspect_files": [
+      "controller.js",
+      "store.js",
+      "model.js",
+      "view.js"
+    ],
+    "confidence": 0.9
+  },
+  "repro_test": null,
+  "candidates": [],
+  "winner_id": null,
+  "gates": [
+    {
+      "gate": "G0",
+      "passed": true,
+      "p_yes": 0.8406525363597014,
+      "detail": "Recording looks like a defect (p=0.84).",
+      "candidate_id": null
+    },
+    {
+      "gate": "G1",
+      "passed": false,
+      "p_yes": null,
+      "detail": "The test passed on the buggy app, so it does not reproduce the bug.",
+      "candidate_id": null
+    }
+  ],
+  "usage": {
+    "calls": 5,
+    "input_tokens": 57663,
+    "output_tokens": 6392,
+    "cost_usd": 0.17449800000000001
+  },
+  "latency_s": 93.53,
+  "internal_error": false,
+  "created_at": "2026-11-21T20:41:16.207246Z"
+}

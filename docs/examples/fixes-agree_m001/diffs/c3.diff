@@ -1,0 +1,11 @@
+--- a/controller.js
++++ b/controller.js
+@@ -117,7 +117,7 @@
+     /*
+      * Finishes the item editing mode successfully.
+      */
+-    Controller.prototype.editItemSave = function (title, id) {
++    Controller.prototype.editItemSave = function (id, title) {
+         var self = this;
+         title = title.trim();
+ 

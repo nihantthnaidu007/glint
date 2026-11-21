@@ -360,6 +360,14 @@ def build_summary(records: list[Record], frozen: str, derived_glint: list[Record
     }
 
 
+def _repo_relative(path: str) -> str:
+    """A path inside this repository shown relative to its root, so no local directory name is published."""
+    try:
+        return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return Path(path).name
+
+
 def config_lines(run_cfg: dict[str, Any], records: list[Record], split: str, tag: str | None, frozen: str) -> list[str]:
     """The 'frozen corpus hash and config' section. Values come from the run's own run_config.json when present."""
     models = run_cfg.get("models") or {"neon": config.NEON, "hydrogen": config.HYDROGEN, "decision": config.DECISION}
@@ -374,7 +382,7 @@ def config_lines(run_cfg: dict[str, Any], records: list[Record], split: str, tag
     lines = [
         f"- Result set: `eval/results/{set_name(split, tag)}/` (split **{split}**" + (f", tag {tag})" if tag else ")"),
         f"- Frozen corpus hash: {frozen}",
-        f"- Corpus: `{run_cfg.get('corpus', 'unknown')}`",
+        f"- Corpus: `{_repo_relative(str(run_cfg.get('corpus', 'unknown')))}`",
         (f"- N: {len({r.get('mutant_id') for r in bugs})} mutants, {len(bugs)} bug runs, "
         f"{len(clean_runs(records))} clean-video runs, rungs {rungs}"),
         (f"- Models: Neon `{models.get('neon')}`, Hydrogen `{models.get('hydrogen')}`, Decision `{models.get('decision')}`; "

@@ -1,0 +1,12 @@
+{"ts": "2026-11-21T20:41:22.169886+00:00", "model": "gemini-decision-1", "input_tokens": 4436, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 1.696}
+{"ts": "2026-11-21T20:41:47.567206+00:00", "model": "gemini-4-neon", "input_tokens": 14657, "output_tokens": 2790, "cost_usd": 0.085821, "latency_s": 25.391}
+{"ts": "2026-11-21T20:41:54.244060+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13453, "output_tokens": 1208, "cost_usd": 0.02924, "latency_s": 6.364}
+{"ts": "2026-11-21T20:42:04.888546+00:00", "model": "gemini-decision-1", "input_tokens": 5598, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 1.013}
+{"ts": "2026-11-21T20:42:16.365485+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13556, "output_tokens": 2826, "cost_usd": 0.041529, "latency_s": 11.466}
+{"ts": "2026-11-21T20:42:16.513408+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13556, "output_tokens": 2869, "cost_usd": 0.041851, "latency_s": 11.617}
+{"ts": "2026-11-21T20:42:17.175863+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13556, "output_tokens": 2866, "cost_usd": 0.041829, "latency_s": 12.284}
+{"ts": "2026-11-21T20:42:36.845714+00:00", "model": "gemini-4-hydrogen", "input_tokens": 13556, "output_tokens": 2870, "cost_usd": 0.041859, "latency_s": 31.943}
+{"ts": "2026-11-21T20:42:43.116045+00:00", "model": "gemini-decision-1", "input_tokens": 2402, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 0.654}
+{"ts": "2026-11-21T20:42:43.207151+00:00", "model": "gemini-decision-1", "input_tokens": 2402, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 0.651}
+{"ts": "2026-11-21T20:42:43.464734+00:00", "model": "gemini-decision-1", "input_tokens": 2402, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 0.858}
+{"ts": "2026-11-21T20:42:43.598179+00:00", "model": "gemini-decision-1", "input_tokens": 2402, "output_tokens": 0, "cost_usd": 0.0, "latency_s": 0.893}

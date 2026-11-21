@@ -1,0 +1,22 @@
+{
+  "summary": "Adding a new todo item clears the input field but does not display the item or the todo list footer on screen.",
+  "steps": [
+    "Click the input field with placeholder \"What needs to be done?\".",
+    "Type a non-empty todo title such as \"Buy milk\".",
+    "Press Enter."
+  ],
+  "expected": "The \"What needs to be done?\" input is cleared, the newly added todo item appears in the todo list, and the footer becomes visible showing \"1 item left\" along with the \"All\", \"Active\", and \"Completed\" filter links.",
+  "observed": "The \"What needs to be done?\" input is cleared, but no todo item appears in the list and the main list section and footer remain hidden.",
+  "evidence_timestamps_s": [
+    1.0,
+    4.0
+  ],
+  "evidence_notes": [
+    "The user clicks into the \"What needs to be done?\" input field.",
+    "After submitting a new todo, the input field is empty with the placeholder \"What needs to be done?\" visible, and neither the new todo item nor the footer is rendered."
+  ],
+  "suspect_files": [
+    "controller.js"
+  ],
+  "confidence": 0.95
+}
