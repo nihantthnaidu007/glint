@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+runs/
+live/
+eval/results/*
+!eval/results/summary.json
+.DS_Store
