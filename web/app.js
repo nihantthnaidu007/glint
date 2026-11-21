@@ -959,6 +959,9 @@
 
   // --- Before/after compare slider ---
 
+  // Start with most of the "after" image visible: the fixed state is what the audience should see first.
+  const COMPARE_START_PCT = 30;
+
   function setComparePercent(pct) {
     const clamped = Math.max(0, Math.min(100, pct));
     dom.compareAfterWrap.style.clipPath = `inset(0 0 0 ${clamped}%)`;
@@ -985,7 +988,7 @@
       dragging = false;
     });
     dom.compareDivider.addEventListener("keydown", (e) => {
-      const cur = Number(dom.compareDivider.getAttribute("aria-valuenow")) || 50;
+      const cur = Number(dom.compareDivider.getAttribute("aria-valuenow")) || COMPARE_START_PCT;
       const step = e.shiftKey ? 10 : 5;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -1203,7 +1206,7 @@
     lastCompletedStepIndex = -1;
     diffCache.clear();
     state = createInitialState(opts);
-    setComparePercent(50);
+    setComparePercent(COMPARE_START_PCT);
     renderAll();
   }
 
