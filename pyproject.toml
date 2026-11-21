@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glint"
+version = "0.1.0"
+description = "Show Glint the bug. It proves the fix."
+requires-python = ">=3.12"
+dependencies = [
+    "google-genai>=3.2",
+    "pydantic>=2.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "playwright>=1.47",
+    "pytest>=8",
+    "pytest-playwright>=0.5",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6"]
+
+[tool.setuptools]
+packages = ["glint"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint.per-file-ignores]
+# These two files are copied verbatim from docs/CONTRACTS.md and must not be reformatted.
+"glint/config.py" = ["I001"]
+"glint/schemas.py" = ["I001"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
