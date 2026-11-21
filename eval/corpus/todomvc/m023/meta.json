@@ -1,0 +1,46 @@
+{
+  "mutant_id": "m023",
+  "app_id": "todomvc",
+  "file": "controller.js",
+  "line": 241,
+  "operator": "logical_swap",
+  "original_snippet": "if (force || this._lastActiveRoute !== \"All\" || this._lastActiveRoute !== activeRoute)",
+  "mutated_snippet": "if (force || this._lastActiveRoute !== \"All\" && this._lastActiveRoute !== activeRoute)",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    },
+    {
+      "kind": "dblclick",
+      "domIdx": 2,
+      "step": 1
+    },
+    {
+      "kind": "click",
+      "domIdx": 2,
+      "step": 2
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "read book",
+      "step": 3
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "ship code",
+      "step": 4
+    },
+    {
+      "kind": "click",
+      "domIdx": 18,
+      "step": 5
+    }
+  ],
+  "split": "test"
+}

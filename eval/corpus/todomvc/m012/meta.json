@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m012",
+  "app_id": "todomvc",
+  "file": "model.js",
+  "line": 51,
+  "operator": "bool_negation",
+  "original_snippet": "if (queryType === \"function\") {",
+  "mutated_snippet": "if (!(queryType === \"function\")) {",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "test"
+}

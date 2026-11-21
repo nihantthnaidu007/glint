@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m004",
+  "app_id": "todomvc",
+  "file": "controller.js",
+  "line": 103,
+  "operator": "delete_stmt",
+  "original_snippet": "self._filter(true);",
+  "mutated_snippet": "/* deleted */",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "dev"
+}

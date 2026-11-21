@@ -1,0 +1,30 @@
+{
+  "mutant_id": "m017",
+  "app_id": "todomvc",
+  "file": "controller.js",
+  "line": 113,
+  "operator": "string_literal",
+  "original_snippet": "self.view.render(\"editItem\", { id: id, title: data[0].title });",
+  "mutated_snippet": "self.view.render(\"editItem_x\", { id: id, title: data[0].title });",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "write tests",
+      "step": 0
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "ship code",
+      "step": 1
+    },
+    {
+      "kind": "dblclick",
+      "domIdx": 5,
+      "step": 2
+    }
+  ],
+  "split": "test"
+}

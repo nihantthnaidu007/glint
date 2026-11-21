@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m003",
+  "app_id": "todomvc",
+  "file": "store.js",
+  "line": 86,
+  "operator": "logical_swap",
+  "original_snippet": "callback = callback || function () {};",
+  "mutated_snippet": "callback = callback && function () {};",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "dev"
+}

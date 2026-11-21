@@ -1,0 +1,24 @@
+{
+  "mutant_id": "m024",
+  "app_id": "todomvc",
+  "file": "store.js",
+  "line": 90,
+  "operator": "comparison_flip",
+  "original_snippet": "for (var i = 0; i < todos.length; i++) {",
+  "mutated_snippet": "for (var i = 0; i >= todos.length; i++) {",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    },
+    {
+      "kind": "dblclick",
+      "domIdx": 2,
+      "step": 1
+    }
+  ],
+  "split": "test"
+}

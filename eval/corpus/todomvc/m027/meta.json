@@ -1,0 +1,19 @@
+{
+  "mutant_id": "m027",
+  "app_id": "todomvc",
+  "file": "controller.js",
+  "line": 98,
+  "operator": "comparison_flip",
+  "original_snippet": "if (title.trim() === \"\")",
+  "mutated_snippet": "if (title.trim() !== \"\")",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 0
+    }
+  ],
+  "split": "test"
+}

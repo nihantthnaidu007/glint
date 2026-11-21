@@ -1,0 +1,74 @@
+{
+  "mutant_id": "m001",
+  "app_id": "todomvc",
+  "file": "controller.js",
+  "line": 120,
+  "operator": "swap_args",
+  "original_snippet": "Controller.prototype.editItemSave = function (id, title) {",
+  "mutated_snippet": "Controller.prototype.editItemSave = function (title, id) {",
+  "seed": 7,
+  "divergent_sequence": [
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "buy milk",
+      "step": 0
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "call mom",
+      "step": 1
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "walk dog",
+      "step": 2
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "read book",
+      "step": 3
+    },
+    {
+      "kind": "click",
+      "domIdx": 2,
+      "step": 4
+    },
+    {
+      "kind": "uncheck",
+      "domIdx": 8,
+      "step": 5
+    },
+    {
+      "kind": "click",
+      "domIdx": 19,
+      "step": 6
+    },
+    {
+      "kind": "click",
+      "domIdx": 2,
+      "step": 7
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 0,
+      "text": "read book",
+      "step": 8
+    },
+    {
+      "kind": "dblclick",
+      "domIdx": 5,
+      "step": 9
+    },
+    {
+      "kind": "fill_enter",
+      "domIdx": 7,
+      "text": "buy milk",
+      "step": 10
+    }
+  ],
+  "split": "dev"
+}
