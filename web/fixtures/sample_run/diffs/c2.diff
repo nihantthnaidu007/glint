@@ -1,0 +1,14 @@
+--- a/controller.js
++++ b/controller.js
+@@ -214,9 +214,11 @@
+     Controller.prototype._updateCount = function () {
+         var self = this;
+         self.model.getCount(function (todos) {
+-            self.view.render("updateElementCount", todos.total);
++            var remaining = Math.max(0, todos.total - todos.completed);
++            self.view.render("updateElementCount", remaining);
+             self.view.render("clearCompletedButton", {
+                 completed: todos.completed,
+                 visible: todos.completed > 0,
+             });
++            self.view.render("contentBlockVisibility", { visible: todos.total > 0 });
