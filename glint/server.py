@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
+import json
+import logging
+import secrets
+import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-import importlib
-import json
-import logging
 from pathlib import Path, PurePosixPath, PureWindowsPath
-import secrets
-import shutil
 from typing import Any
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -29,6 +29,7 @@ REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 SSE_PING_INTERVAL_S: float = 10.0
 REPLAY_MAX_GAP_S: float = 3.0
 UPLOAD_CHUNK_BYTES: int = 1024 * 1024
+WEBM_REMUX_TIMEOUT_S: float = 30.0
 
 _TERMINAL_STATUS_EVENTS = {"run.finished"}
 
@@ -181,6 +182,34 @@ def _copy_bundle_for_replay(src_dir: Path, dst_dir: Path) -> None:
             shutil.copy2(item, target)
 
 
+async def _remux_webm_in_place(path: Path) -> None:
+    """Rewrite a WebM with `ffmpeg -c copy` so its header carries a duration.
+
+    Browser MediaRecorder output has no duration (ffprobe reports N/A), which the pipeline reads as 0 s and
+    rejects as too short. A stream copy fixes the header without re-encoding. On any failure the original
+    file is kept unchanged and the pipeline decides as usual.
+    """
+    tmp = path.with_name(f"{path.stem}.remux{path.suffix}")
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-v", "error", "-y", "-i", str(path), "-c", "copy", str(tmp),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=WEBM_REMUX_TIMEOUT_S)
+        if proc.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+            tmp.replace(path)
+        else:
+            logger.info("webm remux skipped for %s: %s", path, err.decode("utf-8", "replace")[:200])
+    except (OSError, TimeoutError, ValueError) as exc:  # never block the run over a remux
+        logger.info("webm remux skipped for %s: %s", path, exc)
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 async def _run_live_pipeline(
     run_pipeline: Any,
     video_path: Path,
@@ -324,7 +353,7 @@ async def get_apps() -> list[dict[str, Any]]:
 
 @app.post("/api/runs", status_code=202)
 async def create_run(
-    video: UploadFile = File(...),
+    video: UploadFile = File(...),  # noqa: B008 (FastAPI dependency pattern)
     app_id: str = Form(...),
     source: str = Form("upload"),
 ) -> JSONResponse:
@@ -380,6 +409,8 @@ async def create_run(
     state = _RunState(run_id=run_id, run_dir=run_dir)
     _runs[run_id] = state
     _active_live_run_id = run_id
+    if ext == ".webm":
+        await _remux_webm_in_place(input_path)
     state.task = asyncio.create_task(
         _run_live_pipeline(run_pipeline, input_path, app_dir, app_id, run_id, state)
     )

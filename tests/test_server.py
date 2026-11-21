@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
 import json
-from pathlib import Path
 import sys
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -486,3 +486,12 @@ async def test_results_web_and_internal_error_handler(
         assert body["error"]["code"] == "INTERNAL"
         assert "traceback" not in err_resp.text.lower()
         assert "boom secret trace" not in err_resp.text
+
+
+async def test_webm_remux_keeps_unreadable_file_unchanged(tmp_path: Path) -> None:
+    """A file ffmpeg cannot read (or no ffmpeg at all) is left exactly as uploaded, and no temp file remains."""
+    src = tmp_path / "input.webm"
+    src.write_bytes(b"not really a webm")
+    await server._remux_webm_in_place(src)
+    assert src.read_bytes() == b"not really a webm"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["input.webm"]
