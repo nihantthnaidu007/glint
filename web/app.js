@@ -254,13 +254,9 @@
         } else {
           next.gates[gateName] = gateObj;
           if (gateName === "G0") {
-            if (gateObj.passed) {
-              next.stepState.watch = "done";
-              setActiveStep(next.stepState, "understand");
-            } else {
-              next.stepState.watch = "fail";
-              next.stepState.verdict = "active";
-            }
+            // G0 is advisory (CONTRACTS.md section 10, "tune gates on dev"): never blocks the rail.
+            next.stepState.watch = "done";
+            setActiveStep(next.stepState, "understand");
           } else if (gateName === "G1") {
             if (!gateObj.passed) {
               next.stepState.reproduce = "fail";
@@ -309,6 +305,8 @@
       case "repro.ready": {
         next.repro.testCode = typeof data.test_code === "string" ? data.test_code : next.repro.testCode;
         next.repro.screenshot = typeof data.screenshot === "string" ? data.screenshot : next.repro.screenshot;
+        // Real runs send repro.ready without test_code; the frozen test lives at the bundle root.
+        if (!next.repro.testCode) next.repro.testPath = "repro_test.py";
         next.stepState.reproduce = "done";
         setActiveStep(next.stepState, "fix");
         break;
@@ -355,6 +353,7 @@
         next.winnerId = next.verdict.winnerId;
         const ok = next.verdict.status === "VERIFIED_FIX";
         if (next.stepState.watch === "active") next.stepState.watch = ok ? "done" : "fail";
+        if (next.stepState.understand === "active") next.stepState.understand = ok ? "done" : "fail";
         if (next.stepState.reproduce === "active") next.stepState.reproduce = "fail";
         if (next.stepState.fix === "active") next.stepState.fix = "done";
         if (next.stepState.verify === "active") next.stepState.verify = ok ? "done" : "fail";
@@ -445,8 +444,7 @@
     next.latencyS = typeof res.latency_s === "number" ? res.latency_s : null;
     next.costUsd = res.usage && typeof res.usage.cost_usd === "number" ? res.usage.cost_usd : null;
 
-    if (next.gates.G0 && next.gates.G0.passed) next.stepState.watch = "done";
-    else if (next.gates.G0) next.stepState.watch = "fail";
+    if (next.gates.G0 || next.video) next.stepState.watch = "done";
     if (next.spec) next.stepState.understand = "done";
     if (next.repro.testPath || next.repro.testCode) next.stepState.reproduce = "done";
     if (next.candidates.length > 0) {
@@ -532,9 +530,10 @@
     if (s.gates.G0) {
       const g0 = s.gates.G0;
       const pTxt = typeof g0.p_yes === "number" ? g0.p_yes.toFixed(2) : "—";
+      // Advisory only: a quiet line, no pass/fail styling.
       dom.g0Line.hidden = false;
-      dom.g0Line.className = `gate-pill ${g0.passed ? "is-pass" : "is-fail"}`;
-      dom.g0Line.textContent = g0.passed ? `✓ Bug detected · ${pTxt}` : `✕ Not a bug video · ${pTxt}`;
+      dom.g0Line.className = "gate-pill is-advisory";
+      dom.g0Line.textContent = `Bug likelihood · ${pTxt}`;
     } else {
       dom.g0Line.hidden = true;
     }
@@ -645,7 +644,9 @@
       const headline = document.createElement("div");
       headline.className = "repro-headline";
       if (g1.passed) {
-        headline.innerHTML = '<span class="repro-marks" aria-hidden="true">✕ ✕ ✕</span><span>Fails 3 of 3</span><span class="muted small">Bug reproduced</span>';
+        const mismatch = s.gates.G1B && !s.gates.G1B.passed;
+        const note = mismatch ? "Not the symptom in the video" : "Bug reproduced";
+        headline.innerHTML = `<span class="repro-marks" aria-hidden="true">✕ ✕ ✕</span><span>Fails 3 of 3</span><span class="muted small">${note}</span>`;
       } else {
         headline.innerHTML = '<span class="repro-marks" aria-hidden="true">✕</span><span>Did not reproduce reliably</span>';
       }
@@ -673,8 +674,10 @@
     for (const att of s.reproAttempts) {
       const row = document.createElement("div");
       row.className = "attempt-row tabular-nums";
-      const label = att.outcome === "failed_assertion" ? "Assertion failed as expected" : att.outcome;
-      row.textContent = `Attempt ${att.attempt}: ${label}${att.detail ? ` — ${att.detail}` : ""}`;
+      const label = ATTEMPT_LABELS[att.outcome] || att.outcome;
+      const detail = shortText(att.detail, 140);
+      row.textContent = `Attempt ${att.attempt}: ${label}${detail ? ` — ${detail}` : ""}`;
+      if (att.detail && detail !== att.detail) row.title = att.detail;
       dom.reproAttemptsList.appendChild(row);
     }
 
@@ -684,6 +687,28 @@
     } else {
       dom.reproTestDetails.hidden = true;
     }
+  }
+
+  const ATTEMPT_LABELS = {
+    failed_assertion: "Assertion failed as expected",
+    failed_other: "Test broke before its assertion",
+    passed: "Test passed, bug not shown",
+  };
+
+  // First line only, capped, so tool output (tracebacks, banners) never floods a card.
+  function shortText(text, max) {
+    if (!text) return "";
+    const first = String(text).split(/\r?\n/)[0].trim();
+    return first.length > max ? `${first.slice(0, max - 1).trimEnd()}…` : first;
+  }
+
+  // Keep the verdict to one readable sentence: drop a long trailing "(...)" tool detail.
+  function calmReason(reason) {
+    if (!reason) return "";
+    let r = String(reason).trim();
+    const paren = r.indexOf(" (");
+    if (r.length > 160 && paren > 20) r = `${r.slice(0, paren).trimEnd()}.`;
+    return shortText(r, 220);
   }
 
   function makeCheckpointEl(label, status, extraText = "") {
@@ -792,7 +817,11 @@
     }
   }
 
-  function verdictPresentation(status) {
+  function verdictPresentation(status, s) {
+    // G0 is advisory, so an ABSTAIN after the video was understood means "could not reproduce", not "not a bug".
+    if (status === "ABSTAIN" && s && (s.spec || s.reproAttempts.length)) {
+      return { word: "No fix", cls: "is-neutral", icon: "—" };
+    }
     switch (status) {
       case "VERIFIED_FIX":
         return { word: "Verified", cls: "is-verified", icon: "✓" };
@@ -828,18 +857,21 @@
     dom.verdictCard.hidden = !show;
     if (!show) return;
 
-    const pres = verdictPresentation(s.verdict.status);
+    const pres = verdictPresentation(s.verdict.status, s);
     dom.verdictBanner.className = `verdict-banner ${pres.cls}`;
     dom.verdictIcon.textContent = pres.icon;
     dom.verdictWord.textContent = pres.word;
-    dom.verdictReason.textContent = s.verdict.reason || "";
+    dom.verdictReason.textContent = calmReason(s.verdict.reason);
+    if (s.verdict.reason && dom.verdictReason.textContent !== s.verdict.reason) {
+      dom.verdictReason.title = s.verdict.reason;
+    }
 
     const metaParts = [];
     if (typeof s.latencyS === "number") metaParts.push(`${s.latencyS.toFixed(1)}s`);
     if (typeof s.costUsd === "number" && s.costUsd > 0) metaParts.push(`$${s.costUsd.toFixed(3)}`);
     dom.verdictMeta.textContent = metaParts.join(" · ");
 
-    dom.replayBtn.hidden = !(s.mode === "live" && s.finished && s.runId);
+    dom.replayBtn.hidden = !(s.mode === "live" && s.finished && s.runId && s.verdict.status !== "REJECTED_INPUT");
 
     if (!s.verdictAnimated) {
       s.verdictAnimated = true;
@@ -1261,6 +1293,9 @@
         const ev = JSON.parse(e.data);
         state = applyEvent(state, ev);
         renderAll();
+        if (ev.type === "repro.ready" && state.repro.testPath && !state.repro.testCode) {
+          loadReproText(assetUrl(state, state.repro.testPath));
+        }
         if (ev.type === "run.finished") {
           cleanupRunTransports();
         }
@@ -1366,6 +1401,9 @@
         const tid = setTimeout(() => {
           state = applyEvent(state, ev);
           renderAll();
+          if (ev.type === "repro.ready" && state.repro.testPath && !state.repro.testCode) {
+            loadReproText(assetUrl(state, state.repro.testPath));
+          }
         }, cumulativeDelay);
         fixtureTimers.push(tid);
       });

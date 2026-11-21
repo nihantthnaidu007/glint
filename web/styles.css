@@ -573,6 +573,11 @@ body {
   color: var(--fail);
 }
 
+.gate-pill.is-advisory {
+  color: var(--muted, #6B7280);
+  font-weight: 400;
+}
+
 .video-frame {
   border-radius: 8px;
   overflow: hidden;
