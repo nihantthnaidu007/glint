@@ -120,13 +120,14 @@ DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"
 REPAIR_THINKING = "low"           # Neon in the repair round: "medium" took 54 s, over TIMEOUT_S["repair"]
+PERCEIVE_RETRY_THINKING = "low"   # Neon in the one perceive retry after a timeout or error
 
 # Concurrency and budgets
 MAX_CONCURRENCY = int(os.getenv("GLINT_MAX_CONCURRENCY", "4"))
 N_CANDIDATES = 4
 RUN_BUDGET_S = 150
 TIMEOUT_S = {
-    "normalize": 20, "g0": 15, "perceive": 45, "repro_attempt": 40,
+    "normalize": 20, "g0": 15, "perceive": 30, "perceive_retry": 30, "repro_attempt": 40,
     "candidate": 40, "gates_per_candidate": 45, "repair": 40,
 }
 MODEL_RETRIES = 3                 # retries on 429/5xx/timeouts, exponential backoff with jitter
@@ -460,6 +461,7 @@ Gate events for candidates carry `candidate_id`. Run-level gates (G0, G1, G1B) h
 input:      normalize -> REJECTED_INPUT on InputRejected
 g0:         decide(video at DECISION_VIDEO_RESOLUTION, Q_G0) -> ABSTAIN if p_yes < TH_G0_IS_DEFECT
 perceive:   neon(video + all app source with paths) -> ReproSpec; drop suspect_files that do not exist
+            one retry on timeout or error, at PERCEIVE_RETRY_THINKING (see "One-retry rule" below)
             grab frames at evidence timestamps
 repro:      hydrogen -> repro_test.py; run; need failed_assertion REPRO_FAIL_RUNS times in a row
             failed_other or passed -> feed error back, retry up to REPRO_MAX_ATTEMPTS
@@ -491,6 +493,11 @@ errors:     any exception -> caught, internal_error=True, status by stage (befor
 - Reason, measured on one recording: without the text block a screenshot of the buggy state scored 0.54 and a screenshot of the correct state 0.50. With it: 0.78 against 0.20. G0 scored 0.25 at `"low"` and 0.52 at `"high"`.
 
 - G4 passes the same three blocks, but its text block carries the spec's observed AND expected behavior, built by `gates.outcome_block(spec)`: the symptom line above plus `Expected correct behavior after the same steps: <spec.expected>`. Measured on one recording with the symptom alone: fixed app 0.88, unrelated screenshots 0.81 to 0.89. With observed and expected: fixed 0.91, still buggy 0.19, unrelated 0.17 and 0.46.
+
+**One-retry rule for G0 and perceive (contract change "perceive retry", 13:25):** a single slow or failed model call must not end the run.
+- G0: the `decide` call runs under `TIMEOUT_S["g0"]` (15 s). If it times out or raises, the pipeline emits a `log` event and calls it once more under the same 15 s limit.
+- Perceive: the first Neon call runs at `NEON_THINKING` under `TIMEOUT_S["perceive"]` (30 s). If it times out or raises, the pipeline emits a `log` event and retries once at `PERCEIVE_RETRY_THINKING` (`"low"`) under `TIMEOUT_S["perceive_retry"]` (30 s). `perceive.perceive(video_ref, app_dir, duration_s=None, thinking=NEON_THINKING)` takes the thinking level.
+- Only if the retry also fails does the run end: a second timeout gives ABSTAIN with reason "Stopped at <stage>: this step ran out of time."; a second exception gives ABSTAIN with `internal_error` true.
 
 **Patch transport (contract change, 13:10):** the Gemini Developer API rejects map-typed fields in a response schema, so models never return `Patch` directly. They return `patch.PatchWire` (`files: list[{path, content}]`, `rationale`), and the repair round returns `patch.RepairWire` (`patches: list[PatchWire]`). `patch.to_patch()` converts each to the shared `Patch` (path -> full content). `Patch` itself is unchanged.
 

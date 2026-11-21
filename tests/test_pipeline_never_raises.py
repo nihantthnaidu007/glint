@@ -1,14 +1,15 @@
 """run_pipeline never raises: model failures and bad input both become a RunResult. No network."""
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from glint import config, gemini, pipeline
-from glint.schemas import Event, RunResult
+from glint import config, gemini, patch, perceive, pipeline, repro
+from glint.schemas import Event, GateResult, ReproSpec, RunResult
 
 APP = Path(__file__).resolve().parent.parent / "apps" / "todomvc"
 
@@ -100,3 +101,93 @@ async def test_missing_video_and_broken_emit(runs_dir: Path, tmp_path: Path) -> 
 def test_new_run_id_format() -> None:
     run_id = pipeline.new_run_id()
     assert run_id.startswith("r_") and len(run_id) == len("r_20261121_143012_a3f9")
+
+
+SPEC = ReproSpec(summary="s", steps=["do it"], expected="e", observed="o", confidence=0.9)
+
+
+def stub_later_stages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace upload and everything after perceive with local stand-ins, so the run can reach select offline."""
+
+    async def fake_upload(path: Path) -> gemini.VideoRef:
+        return gemini.VideoRef(name="files/x", uri="https://example.invalid/x", mime_type="video/mp4")
+
+    async def fake_repro(video_ref, spec, app_dir, bundle_dir, emit=None):
+        (bundle_dir / "repro_test.py").write_text("def test_repro(page):\n    pass\n")
+        return bundle_dir / "repro_test.py", [GateResult(gate="G1", passed=True), GateResult(gate="G1B", passed=True)]
+
+    async def no_candidates(*args: object, **kwargs: object) -> list:
+        return []
+
+    monkeypatch.setattr(gemini, "upload_video", fake_upload)
+    monkeypatch.setattr(repro, "establish_repro", fake_repro)
+    monkeypatch.setattr(patch, "candidates", no_candidates)
+    monkeypatch.setattr(patch, "repair", no_candidates)
+
+
+async def test_slow_first_perceive_is_retried(runs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_later_stages(monkeypatch)
+    monkeypatch.setitem(config.TIMEOUT_S, "perceive", 0.2)
+    calls: list[str] = []
+
+    async def fake_g0(video_ref):
+        return GateResult(gate="G0", passed=True, p_yes=0.9)
+
+    async def slow_then_fast(video_ref, app_dir, duration_s=None, thinking=config.NEON_THINKING):
+        calls.append(thinking)
+        if len(calls) == 1:
+            await asyncio.sleep(5)
+        return SPEC
+
+    monkeypatch.setattr(perceive, "is_defect", fake_g0)
+    monkeypatch.setattr(perceive, "perceive", slow_then_fast)
+    result = await pipeline.run_pipeline(make_video(tmp_path / "v.mp4"), APP, "todomvc", "r_test_retry")
+    assert calls == [config.NEON_THINKING, config.PERCEIVE_RETRY_THINKING]
+    assert result.status == "NO_VERIFIED_FIX" and result.internal_error is False
+    assert result.spec == SPEC and result.stage_reached == "select"
+    events = check_bundle(runs_dir / "r_test_retry", result)
+    logs = [e for e in events if e.type == "log"]
+    assert len(logs) == 1 and "retrying once" in logs[0].data["message"] and logs[0].stage == "perceive"
+    assert any(e.type == "spec.ready" for e in events)
+
+
+async def test_perceive_failing_twice_abstains(runs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_later_stages(monkeypatch)
+    monkeypatch.setitem(config.TIMEOUT_S, "perceive", 0.2)
+    monkeypatch.setitem(config.TIMEOUT_S, "perceive_retry", 0.2)
+
+    async def fake_g0(video_ref):
+        return GateResult(gate="G0", passed=True, p_yes=0.9)
+
+    async def always_slow(*args: object, **kwargs: object) -> ReproSpec:
+        await asyncio.sleep(5)
+        return SPEC
+
+    monkeypatch.setattr(perceive, "is_defect", fake_g0)
+    monkeypatch.setattr(perceive, "perceive", always_slow)
+    result = await pipeline.run_pipeline(make_video(tmp_path / "v.mp4"), APP, "todomvc", "r_test_retry2")
+    assert result.status == "ABSTAIN" and result.internal_error is False
+    assert result.reason == "Stopped at perceive: this step ran out of time."
+
+
+async def test_g0_error_is_retried(runs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_later_stages(monkeypatch)
+    attempts: list[int] = []
+
+    async def flaky_decide(input_blocks: list[dict], questions: dict[str, str]) -> dict[str, float]:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("decision api hiccup")
+        return {"g0": 0.9}
+
+    async def fake_perceive(*args: object, **kwargs: object) -> ReproSpec:
+        return SPEC
+
+    monkeypatch.setattr(gemini, "decide", flaky_decide)
+    monkeypatch.setattr(perceive, "perceive", fake_perceive)
+    result = await pipeline.run_pipeline(make_video(tmp_path / "v.mp4"), APP, "todomvc", "r_test_g0retry")
+    assert len(attempts) == 2
+    assert result.status == "NO_VERIFIED_FIX" and result.internal_error is False
+    assert result.gates[0].gate == "G0" and result.gates[0].passed
+    events = read_events(runs_dir / "r_test_g0retry")
+    assert any(e.type == "log" and e.stage == "g0" for e in events)

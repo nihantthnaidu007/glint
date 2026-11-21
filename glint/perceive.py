@@ -100,7 +100,9 @@ def clean_spec(spec: ReproSpec, app_dir: Path, duration_s: float | None = None) 
     )
 
 
-async def perceive(video_ref: VideoRef, app_dir: Path, duration_s: float | None = None) -> ReproSpec:
+async def perceive(
+    video_ref: VideoRef, app_dir: Path, duration_s: float | None = None, thinking: str = config.NEON_THINKING
+) -> ReproSpec:
     """Neon watches the recording, reads the whole app, and returns a ReproSpec.
 
     duration_s is the normalized video's length; when given, evidence timestamps are clamped to it.
@@ -108,7 +110,7 @@ async def perceive(video_ref: VideoRef, app_dir: Path, duration_s: float | None 
     sources = app_source_parts(app_dir)
     file_list = ", ".join(p.relative_to(app_dir).as_posix() for p in app_source_files(app_dir))
     parts: list = [video_ref, *sources, PERCEIVE_PROMPT.format(file_list=file_list)]
-    spec = await gemini.neon(parts, schema=ReproSpec)
+    spec = await gemini.neon(parts, schema=ReproSpec, thinking=thinking)
     if not isinstance(spec, ReproSpec):
         raise TypeError("Neon did not return a ReproSpec")
     return clean_spec(spec, app_dir, duration_s)

@@ -12,13 +12,14 @@ DECISION_VIDEO_RESOLUTION = "high"  # video resolution for the Decision gates G0
 NEON_THINKING = "medium"
 HYDROGEN_THINKING = "low"
 REPAIR_THINKING = "low"           # Neon in the repair round: "medium" took 54 s, over TIMEOUT_S["repair"]
+PERCEIVE_RETRY_THINKING = "low"   # Neon in the one perceive retry after a timeout or error
 
 # Concurrency and budgets
 MAX_CONCURRENCY = int(os.getenv("GLINT_MAX_CONCURRENCY", "4"))
 N_CANDIDATES = 4
 RUN_BUDGET_S = 150
 TIMEOUT_S = {
-    "normalize": 20, "g0": 15, "perceive": 45, "repro_attempt": 40,
+    "normalize": 20, "g0": 15, "perceive": 30, "perceive_retry": 30, "repro_attempt": 40,
     "candidate": 40, "gates_per_candidate": 45, "repair": 40,
 }
 MODEL_RETRIES = 3                 # retries on 429/5xx/timeouts, exponential backoff with jitter

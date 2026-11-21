@@ -111,6 +111,21 @@ async def _timed[T](stage_key: str, call: Awaitable[T]) -> T:
         raise _StageTimeout(stage_key) from exc
 
 
+async def _with_one_retry[T](
+    run: _Run, label: str, first_key: str, first: Callable[[], Awaitable[T]], retry_key: str, retry: Callable[[], Awaitable[T]]
+) -> T:
+    """Run first() under its stage limit; if it times out or raises, log it and run retry() once."""
+    try:
+        return await _timed(first_key, first())
+    except _StageTimeout:
+        why = "took too long"
+    except Exception as exc:  # noqa: BLE001 - one failed model call gets one more chance
+        log.warning("%s failed (%s), retrying once", label, type(exc).__name__)
+        why = f"failed ({type(exc).__name__})"
+    await run.emit("log", {"message": f"{label} {why}, retrying once."})
+    return await _timed(retry_key, retry())
+
+
 def _lines_changed(app_dir: Path, c: Candidate) -> int:
     """Added plus removed lines of a candidate's patch against the app, for display before the gates run."""
     if c.patch is None:
@@ -168,7 +183,9 @@ async def _stage_input(run: _Run, video_path: Path, app_dir: Path) -> VideoRef:
 
 async def _stage_g0(run: _Run, video_ref: VideoRef) -> None:
     run.stage = "g0"
-    gate = await _timed("g0", perceive.is_defect(video_ref))
+    gate = await _with_one_retry(
+        run, "The bug check (G0)", "g0", lambda: perceive.is_defect(video_ref), "g0", lambda: perceive.is_defect(video_ref)
+    )
     run.gates.append(gate)
     await run.emit("gate.result", gate.model_dump())
     if not gate.passed:
@@ -181,7 +198,14 @@ async def _stage_g0(run: _Run, video_ref: VideoRef) -> None:
 async def _stage_perceive(run: _Run, video_ref: VideoRef, app_dir: Path) -> ReproSpec:
     run.stage = "perceive"
     duration = run.video.duration_s if run.video else None
-    spec = await _timed("perceive", perceive.perceive(video_ref, app_dir, duration))
+    spec = await _with_one_retry(
+        run,
+        "Watching the recording",
+        "perceive",
+        lambda: perceive.perceive(video_ref, app_dir, duration),
+        "perceive_retry",
+        lambda: perceive.perceive(video_ref, app_dir, duration, config.PERCEIVE_RETRY_THINKING),
+    )
     run.spec = spec
     (run.bundle / "spec.json").write_text(spec.model_dump_json(indent=2), encoding="utf-8")
     frames: list[str] = []
