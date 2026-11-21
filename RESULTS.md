@@ -63,8 +63,11 @@ A divergence counts only if the same sequence diverges at the same step 3 times 
 
 | System | Bug runs | True-fix rate | Precision when claiming fixed | Wrong-fix rate | Abstain rate | False fixes on clean videos | Median latency (s) | Mean cost (USD) |
 |---|---|---|---|---|---|---|---|---|
-| Glint | 21 | 66.7% (14/21) | 100.0% (14/14) | 0.0% (0/21) | 33.3% | 0 of 1 | 56.9 | 0.2358 |
+| Glint v1 | 21 | 66.7% (14/21) | 100.0% (14/14) | 0.0% (0/21) | 33.3% | 0 of 1 | 56.9 | 0.2358 |
+| Glint v2 (derived from v1 runs) | 21 | 85.7% (18/21) | 94.7% (18/19) | 4.8% (1/21) | 9.5% | 0 of 1 | 56.9 | 0.2358 |
 | Single Neon call | 21 | 95.2% (20/21) | 95.2% (20/21) | 4.8% (1/21) | 0.0% | 0 of 1 | 27.7 | 0.0907 |
+
+"Derived" means the saved v1 Glint runs were recounted under the v2 selection rule from their saved candidates and gate results, with no model called again; newly claimed fixes were scored by the same oracle. The v2 rule was chosen after seeing these v1 results (see eval/CHANGES_AFTER_V1.md). v1 is the scored run.
 
 True-fix rate = TRUE_FIX / all bug runs. Precision when claiming fixed = TRUE_FIX / runs with a claimed fix. Wrong-fix rate = WRONG_FIX / all bug runs. Abstain rate = runs without a claimed fix / all bug runs. Latency and cost are over bug runs. "n/a" means the denominator is zero.
 

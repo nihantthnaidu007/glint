@@ -306,17 +306,30 @@ def main_row(name: str, m: dict[str, Any]) -> list[str]:
     ]
 
 
+DERIVED_NAME = "Glint v2 (derived from v1 runs)"
+DERIVED_NOTE = (
+    "\"Derived\" means the saved v1 Glint runs were recounted under the v2 selection rule from their saved "
+    "candidates and gate results, with no model called again; newly claimed fixes were scored by the same oracle. "
+    "The v2 rule was chosen after seeing these v1 results (see eval/CHANGES_AFTER_V1.md). v1 is the scored run."
+)
+
 MAIN_HEADER = [
     "System", "Bug runs", "True-fix rate", "Precision when claiming fixed", "Wrong-fix rate", "Abstain rate",
     "False fixes on clean videos", "Median latency (s)", "Mean cost (USD)",
 ]  # fmt: skip
 
 
-def build_summary(records: list[Record], frozen: str) -> dict[str, Any]:
-    """eval/results/summary.json in the shape of CONTRACTS.md section 9. Undefined rates are written as 0.0."""
+def build_summary(records: list[Record], frozen: str, derived_glint: list[Record] | None = None) -> dict[str, Any]:
+    """eval/results/summary.json in the shape of CONTRACTS.md section 9. Undefined rates are written as 0.0.
+
+    With derived v2 records the rows are "Glint v1", "Glint v2 (derived from v1 runs)", "Single Neon call".
+    """
+    sources: list[tuple[str, list[Record]]] = [(name, records_of(records, system)) for system, name in SYSTEM_NAMES.items()]
+    if derived_glint:
+        sources = [("Glint v1", sources[0][1]), (DERIVED_NAME, derived_glint), sources[1]]
     rows = []
-    for system, name in SYSTEM_NAMES.items():
-        m = system_metrics(records_of(records, system))
+    for name, system_records in sources:
+        m = system_metrics(system_records)
         rows.append(
             {
                 "system": name,
@@ -436,6 +449,7 @@ def render(
     predictions_text: str | None,
     other_tags: dict[str, list[Record]],
     controls: dict[str, Any] | None = None,
+    derived_glint: list[Record] | None = None,
 ) -> str:
     """RESULTS.md as one string."""
     glint_records = records_of(records, "glint")
@@ -449,7 +463,18 @@ def render(
     out += ["## Oracle controls", "", *control_lines(controls, records), ""]
 
     out += ["## Main table", ""]
-    out += table(MAIN_HEADER, [main_row(SYSTEM_NAMES[s], metrics[s]) for s in SYSTEM_NAMES if metrics[s]["n_bug_runs"] or metrics[s]["n_clean_runs"]])
+    if derived_glint:
+        out += table(
+            MAIN_HEADER,
+            [
+                main_row("Glint v1", metrics["glint"]),
+                main_row(DERIVED_NAME, system_metrics(derived_glint)),
+                main_row(SYSTEM_NAMES["baseline"], metrics["baseline"]),
+            ],
+        )
+        out += ["", DERIVED_NOTE]
+    else:
+        out += table(MAIN_HEADER, [main_row(SYSTEM_NAMES[s], metrics[s]) for s in SYSTEM_NAMES if metrics[s]["n_bug_runs"] or metrics[s]["n_clean_runs"]])
     out += [
         "",
         ("True-fix rate = TRUE_FIX / all bug runs. Precision when claiming fixed = TRUE_FIX / runs with a claimed fix. "
@@ -531,11 +556,17 @@ def main() -> None:
 
     controls_path = set_dir / "controls.json"
     controls = json.loads(controls_path.read_text(encoding="utf-8")) if controls_path.is_file() else None
+    derived_dir = args.results / f"{split}_v2_derived"
+    derived_glint = records_of(load_records(derived_dir), "glint") if tag == "v1" and derived_dir.is_dir() else None
     RESULTS_MD.write_text(
-        render(records, split, tag, run_cfg, frozen, predictions, other_tags, controls), encoding="utf-8"
+        render(records, split, tag, run_cfg, frozen, predictions, other_tags, controls, derived_glint or None),
+        encoding="utf-8",
     )
     SUMMARY_JSON.parent.mkdir(parents=True, exist_ok=True)
-    SUMMARY_JSON.write_text(json.dumps(build_summary(records, frozen), indent=2) + "\n", encoding="utf-8")
+    summary = build_summary(records, frozen, derived_glint or None)
+    if derived_glint:
+        summary["note"] = DERIVED_NOTE
+    SUMMARY_JSON.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(f"{len(records)} records from {set_dir} -> {RESULTS_MD} and {SUMMARY_JSON}")
 
 

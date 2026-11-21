@@ -4,11 +4,21 @@
   "n_test_mutants": 18,
   "rows": [
     {
-      "system": "Glint",
+      "system": "Glint v1",
       "true_fix_rate": 0.6667,
       "precision_when_claiming": 1.0,
       "wrong_fix_rate": 0.0,
       "abstain_rate": 0.3333,
+      "clean_video_false_fixes": 0,
+      "median_latency_s": 56.9,
+      "mean_cost_usd": 0.2358
+    },
+    {
+      "system": "Glint v2 (derived from v1 runs)",
+      "true_fix_rate": 0.8571,
+      "precision_when_claiming": 0.9474,
+      "wrong_fix_rate": 0.0476,
+      "abstain_rate": 0.0952,
       "clean_video_false_fixes": 0,
       "median_latency_s": 56.9,
       "mean_cost_usd": 0.2358
@@ -36,5 +46,6 @@
       "true_fix_rate": 0.6667
     }
   ],
-  "repair_share_of_fixes": 0.0
+  "repair_share_of_fixes": 0.0,
+  "note": "\"Derived\" means the saved v1 Glint runs were recounted under the v2 selection rule from their saved candidates and gate results, with no model called again; newly claimed fixes were scored by the same oracle. The v2 rule was chosen after seeing these v1 results (see eval/CHANGES_AFTER_V1.md). v1 is the scored run."
 }
