@@ -1285,6 +1285,12 @@
       return;
     }
     const url = `/api/runs/${encodeURIComponent(runId)}/events`;
+    try {
+      // Keep the run in the address bar so a reload (or a backup tab) reopens it.
+      window.history.replaceState(null, "", `?run=${encodeURIComponent(runId)}`);
+    } catch (_) {
+      // Ignore: history API unavailable
+    }
     eventSource = new EventSource(url);
 
     const handleMsg = (e) => {
@@ -1341,6 +1347,15 @@
     const pollOnce = async () => {
       try {
         const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+        if (resp.status === 404) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          state.running = false;
+          state.started = false;
+          renderAll();
+          showCaptureError(await extractApiError(resp, "This run was not found."));
+          return;
+        }
         if (!resp.ok) return;
         const body = await resp.json();
         if (body && body.running === true && !body.status) {
@@ -1546,12 +1561,22 @@
 
     const params = new URLSearchParams(window.location.search);
     const fixture = params.get("fixture");
+    const runParam = params.get("run");
     if (fixture) {
       dom.healthDot.className = "health-dot is-ok";
       dom.healthLabel.textContent = "Fixture";
       playFixture(fixture);
     } else {
       initLiveMetadata();
+      if (runParam && /^[A-Za-z0-9_-]+$/.test(runParam)) {
+        // Open an existing run (demo backup): the events route replays every past event to a late subscriber.
+        resetRunState();
+        state.runId = runParam;
+        state.started = true;
+        state.running = true;
+        renderAll();
+        subscribeRunEvents(runParam);
+      }
     }
   }
 
