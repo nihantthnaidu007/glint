@@ -61,7 +61,45 @@ async def _move_cursor_to(page: Page, locator: Any) -> None:
         logger.debug("Could not move cursor to locator: %s", exc)
 
 
-async def _replay_actions(page: Page, sequence: list[dict[str, Any]]) -> None:
+_USER_TARGET_JS = """
+(el) => {
+    const hittable = (node) => {
+        const rect = node.getBoundingClientRect();
+        const style = window.getComputedStyle(node);
+        return rect.width >= 4 && rect.height >= 4 && parseFloat(style.opacity) > 0
+            && style.visibility !== "hidden" && style.display !== "none";
+    };
+    if (hittable(el)) return "self";
+    const next = el.nextElementSibling;
+    if (next && next.tagName === "LABEL" && hittable(next)) return "next-label";
+    if (el.id && document.querySelector('label[for="' + el.id + '"]')) return "for-label";
+    if (el.closest("label")) return "parent-label";
+    return "none";
+}
+"""
+
+
+async def _user_target(page: Page, locator: Any) -> Any | None:
+    """The element a real user would click for this control.
+
+    Some checkboxes are hidden (1x1 px, opacity 0) and operated through their label. A forced click on the
+    hidden input does something no user can do, so the recording would show a click with no effect.
+    Returns the label in that case, the element itself when it can be hit, or None when nothing can be clicked.
+    """
+    kind = await locator.evaluate(_USER_TARGET_JS)
+    if kind == "self":
+        return locator
+    if kind == "next-label":
+        return locator.locator("xpath=following-sibling::label[1]")
+    if kind == "for-label":
+        element_id = await locator.get_attribute("id")
+        return page.locator(f'label[for="{element_id}"]').first
+    if kind == "parent-label":
+        return locator.locator("xpath=ancestor::label[1]")
+    return None
+
+
+async def _replay_actions(page: Page, sequence: list[dict[str, Any]], pause_ms: int = 0) -> None:
     for action in sequence:
         kind = action.get("kind")
         if kind == "escape":
@@ -69,16 +107,41 @@ async def _replay_actions(page: Page, sequence: list[dict[str, Any]]) -> None:
             continue
         dom_idx = action.get("domIdx", 0)
         locator = page.locator(_INTERACTIVE_SELECTOR).nth(dom_idx)
-        await _move_cursor_to(page, locator)
+        if await locator.count() == 0:
+            logger.debug("Skipping action %s: element %d is not on the page", kind, dom_idx)
+            continue
         if kind in ("check", "uncheck"):
-            await locator.click(force=True)
-        elif kind == "fill_enter":
+            target = await _user_target(page, locator)
+            if target is None:
+                logger.debug("Skipping %s: element %d cannot be clicked by a user", kind, dom_idx)
+                continue
+            await _move_cursor_to(page, target)
+            await target.click()
+            if pause_ms:
+                await page.wait_for_timeout(pause_ms)
+            continue
+        await _move_cursor_to(page, locator)
+        if kind == "fill_enter":
             await locator.fill(action.get("text", "buy milk"))
             await locator.press("Enter")
         elif kind == "dblclick":
             await locator.dblclick()
         else:
             await locator.click()
+        if pause_ms:
+            await page.wait_for_timeout(pause_ms)
+
+
+async def _plan_clean_actions(browser: Browser, url: str, seed: int, length: int) -> list[dict[str, Any]]:
+    """Choose the clean-use actions on a page that is not recorded, so the recorded page can replay them
+    with user-realistic clicks."""
+    context = await browser.new_context(viewport={"width": 1280, "height": 720})
+    try:
+        page = await context.new_page()
+        await page.goto(url, wait_until="domcontentloaded")
+        return [await _pick_and_perform_step(page, seed, step_idx) for step_idx in range(length)]
+    finally:
+        await context.close()
 
 
 async def _record_one(
@@ -92,6 +155,9 @@ async def _record_one(
 ) -> None:
     out_webm.parent.mkdir(parents=True, exist_ok=True)
     with _serve_dir(app_dir) as url, tempfile.TemporaryDirectory(prefix="glint_rec_") as vid_dir:
+        clean_actions = (
+            await _plan_clean_actions(browser, url, clean_seed, clean_length) if clean_seed is not None else None
+        )
         context = await browser.new_context(
             viewport={"width": 1280, "height": 720},
             record_video_dir=vid_dir,
@@ -111,10 +177,8 @@ async def _record_one(
             await page.wait_for_timeout(1000)
             if sequence is not None:
                 await _replay_actions(page, sequence)
-            elif clean_seed is not None:
-                for step_idx in range(clean_length):
-                    await _pick_and_perform_step(page, clean_seed, step_idx)
-                    await page.wait_for_timeout(200)
+            elif clean_actions is not None:
+                await _replay_actions(page, clean_actions, pause_ms=200)
             await page.wait_for_timeout(1500)
         finally:
             await context.close()
@@ -146,18 +210,19 @@ async def _record_corpus(app_name: str, only: str | None) -> None:
                 )
                 print(f"Recorded {out_webm}")
 
-            if only is None:
-                for idx in range(1, 6):
-                    clean_dir = corpus_dir / "clean" / f"c{idx:02d}"
-                    out_webm = clean_dir / "video_r0.webm"
-                    await _record_one(
-                        browser,
-                        orig_app,
-                        out_webm,
-                        clean_seed=100 + idx,
-                        clean_length=6,
-                    )
-                    print(f"Recorded {out_webm}")
+            for idx in range(1, 6):
+                if only and only != f"c{idx:02d}":
+                    continue
+                clean_dir = corpus_dir / "clean" / f"c{idx:02d}"
+                out_webm = clean_dir / "video_r0.webm"
+                await _record_one(
+                    browser,
+                    orig_app,
+                    out_webm,
+                    clean_seed=100 + idx,
+                    clean_length=6,
+                )
+                print(f"Recorded {out_webm}")
         finally:
             await browser.close()
 
@@ -165,7 +230,7 @@ async def _record_corpus(app_name: str, only: str | None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record R0 bug and clean videos for eval corpus.")
     parser.add_argument("--app", required=True, help="App name under apps/ and eval/corpus/.")
-    parser.add_argument("--only", default=None, help="Record only this mutant id (e.g. m001).")
+    parser.add_argument("--only", default=None, help="Record only this mutant or clean video id (e.g. m001 or c01).")
     args = parser.parse_args()
     asyncio.run(_record_corpus(args.app, args.only))
 
